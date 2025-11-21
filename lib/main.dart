@@ -1,6 +1,15 @@
+import 'package:firebase_core/firebase_core.dart'; // 1. 맨 위에 이 줄 추가 (자동 임포트 안 되면 직접 입력)
+import 'firebase_options.dart'; // 2. 이것도 추가 (자동 생성된 파일)
 import 'package:flutter/material.dart';
 
-void main() {
+// 3. main 함수를 이렇게 바꿉니다.
+void main() async { // async 키워드 추가
+  WidgetsFlutterBinding.ensureInitialized(); // 플러터 엔진 초기화
+
+  await Firebase.initializeApp( // 파이어베이스 초기화
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   runApp(const MyApp());
 }
 
