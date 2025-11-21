@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "147574998932",
+    "project_id": "foodscanner-b4ff4",
+    "storage_bucket": "foodscanner-b4ff4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:147574998932:android:b148c52399e2db6636f181",
+        "android_client_info": {
+          "package_name": "com.example.hackton_2025_2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBDEZKOD5uexRF9qgKd5L3UfCmbiG_aU1Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
