@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'home_screen.dart';
 import 'camera_screen.dart';
 import 'stats_screen.dart';
+import 'login/login_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -27,10 +29,47 @@ class _MainScreenState extends State<MainScreen> {
       _selectedIndex = index;
     });
   }
+  //로그인 로그아웃을 하기위한 임시 코드
+  void _logout() async{
+    try{
+      //1. FIREBASE에서 현재 사용자 로그아웃을 처리하는 코드
+      await FirebaseAuth.instance.signOut();
+      print('Firebase 로그아웃 성공');
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            // 🚨 실제 LoginScreen 위젯으로 대체해야 합니다.
+            builder: (context) => const LoginPage(),
+          ),
+        );
+      }
+    }
+    catch(e){
+      print('로그아웃 오류: $e');
+      // 사용자에게 SnackBar 등으로 오류 알림
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('로그아웃에 실패했습니다: $e')),
+      );
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      //로그아웃 버튼 임시로 만든것
+      appBar: AppBar(
+        title: const Text('앱 이름'), // 앱 제목
+        actions: [
+          // 임시 로그아웃 버튼
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _logout, // 로그아웃 함수 연결
+            tooltip: '로그아웃',
+          ),
+        ],
+      ),
+      
       // 현재 선택된 인덱스에 맞는 화면을 보여줌
       body: _screens[_selectedIndex],
 
