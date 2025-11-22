@@ -44,6 +44,7 @@ class MyApp extends StatelessWidget {
           if (snapshot.hasData) {
             return const MainScreen(); // 로그인 상태
           }
+          print("로그아웃 화면\n");
           return const LoginPage();  // 로그아웃 상태
         },
       ),
