@@ -19,7 +19,10 @@ class _LoginPageState extends State<LoginPage> {
     setState(() {
       _isLoading = true;
     });
-
+    print('--- 재로그인 시도 정보 ---');
+    print('Email: ${_emailController.text.trim()}');
+    print('Password (길이): ${_passwordController.text.trim().length}');
+    print('-------------------------');
     try {
       // Firebase Authentication을 사용하여 로그인 시도 (경비실 통과 시도)
       await _auth.signInWithEmailAndPassword(
@@ -49,14 +52,24 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } finally {
+      if(mounted){
       setState(() {
         _isLoading = false;
       });
     }
+    }
   }
+  @override
 
+  void dispose() {
+    _emailController.dispose(); // 👈 이메일 컨트롤러 해제
+    _passwordController.dispose(); // 👈 비밀번호 컨트롤러 해제
+    //print("정리");
+    super.dispose();
+  }
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
       appBar: AppBar(title: const Text('로그인')),
       body: Center(
