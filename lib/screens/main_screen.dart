@@ -30,26 +30,29 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
   //로그인 로그아웃을 하기위한 임시 코드
-  void _logout() async{
-    try{
-      //1. FIREBASE에서 현재 사용자 로그아웃을 처리하는 코드
+  void _logout() async {
+    try {
+      // 1. FIREBASE에서 현재 사용자 로그아웃을 처리하는 코드는 이것 하나로 충분합니다.
       await FirebaseAuth.instance.signOut();
       print('Firebase 로그아웃 성공');
+
+      // 2. 🌟 Navigator 코드는 제거합니다. 🌟
+      // 로그아웃이 성공하면 StreamBuilder가 자동으로 LoginPage로 전환합니다.
+
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            // 🚨 실제 LoginScreen 위젯으로 대체해야 합니다.
-            builder: (context) => const LoginPage(),
-          ),
+        // (선택 사항) 사용자에게 로그아웃 성공 메시지를 표시할 수 있습니다.
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('로그아웃되었습니다.')),
         );
       }
-    }
-    catch(e){
+
+    } catch (e) {
       print('로그아웃 오류: $e');
-      // 사용자에게 SnackBar 등으로 오류 알림
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('로그아웃에 실패했습니다: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('로그아웃에 실패했습니다: $e')),
+        );
+      }
     }
   }
 
