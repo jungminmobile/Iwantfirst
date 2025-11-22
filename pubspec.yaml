@@ -43,7 +43,7 @@ dependencies:
 
   # AI & 이미지
   google_generative_ai: ^0.4.0
-  image_picker: ^1.1.2
+  image_picker: ^1.2.1
 
   # UI & 유틸
   fl_chart: ^0.68.0
