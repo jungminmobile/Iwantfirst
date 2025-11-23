@@ -211,7 +211,7 @@ class _CameraScreenState extends State<CameraScreen> {
           context,
           MaterialPageRoute(
             // 받아온 리스트를 다음 화면으로 넘겨줌
-            builder: (context) => EditFoodScreen(initialFoods: foodList),
+            builder: (context) => EditFoodScreen(initialFoods: foodList, mealType: mealType,),
           ),
         );
       } else {

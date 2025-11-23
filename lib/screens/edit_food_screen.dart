@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import '../services/gemini_service.dart';
+import '../models/food_item.dart';
+import '../services/database_service.dart';
 import 'dart:convert'; // jsonDecode용
 
 class EditFoodScreen extends StatefulWidget {
   final List<Map<String, String>> initialFoods; // 이전 화면에서 넘겨받은 데이터
+  final String mealType;
 
-  const EditFoodScreen({super.key, required this.initialFoods});
+  const EditFoodScreen({super.key, required this.initialFoods, required this.mealType});
 
   @override
   State<EditFoodScreen> createState() => _EditFoodScreenState();
@@ -80,20 +83,60 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
     }
   }
 
-  void _showResultDialog(String json) {
+  void _showResultDialog(String jsonStr) {
+    // 1. JSON 파싱해서 FoodItem 리스트로 변환
+    List<dynamic> parsed = jsonDecode(jsonStr);
+    List<FoodItem> finalFoods = parsed.map((x) => FoodItem.fromJson(x)).toList();
+
+    // 합계 계산 (화면에 보여주기 용)
+    int totalCal = finalFoods.fold(0, (sum, item) => sum + item.calories);
+
     showDialog(
       context: context,
+      barrierDismissible: false, // 저장 중 실수로 닫기 방지
       builder: (ctx) => AlertDialog(
-        title: const Text('최종 분석 결과'),
-        content: SingleChildScrollView(child: Text(json)),
+        title: const Text('분석 완료'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('총 칼로리: $totalCal kcal'),
+            const SizedBox(height: 10),
+            const Text('이대로 저장하시겠습니까?', style: TextStyle(color: Colors.grey)),
+          ],
+        ),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx); // 다이얼로그 닫고
-              Navigator.pop(context); // 수정 화면도 닫고 (홈으로 가거나 기록 완료 처리)
-              // TODO: 여기서 Firebase DB에 저장하는 로직 추가하면 됨
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              // 🟢 [저장 로직 시작]
+              try {
+                // 다이얼로그 닫고 로딩 표시 (선택사항)
+                Navigator.pop(ctx);
+
+                await DatabaseService().saveMeal(
+                  mealType: widget.mealType,
+                  foods: finalFoods,
+                );
+
+                if (mounted) {
+                  // 성공하면 홈 화면으로 이동 (모든 창 닫기)
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('식단이 저장되었습니다! 📝')),
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('저장 실패: $e')),
+                );
+              }
             },
-            child: const Text('기록 완료'),
+            child: const Text('저장하기'),
           ),
         ],
       ),
