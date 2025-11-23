@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // 🟢 패키지 추가됨
-import 'package:intl/intl.dart'; // 🟢 날짜 비교용 (없으면 flutter pub add intl)
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 import 'edit_food_screen.dart';
 import '../services/gemini_service.dart';
+import '../services/database_service.dart'; // DB 서비스 추가
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -15,7 +16,12 @@ class CameraScreen extends StatefulWidget {
 
 class _CameraScreenState extends State<CameraScreen> {
   final ImagePicker _picker = ImagePicker();
+
+  // 로딩 상태 변수
   bool _isAnalyzing = false;
+
+  // DB에서 가져온 저장된 식단 데이터 (키: '아침', '점심' 등)
+  Map<String, dynamic> _savedMeals = {};
 
   // 데이터 리스트들
   List<XFile> _breakfastImages = [];
@@ -27,6 +33,7 @@ class _CameraScreenState extends State<CameraScreen> {
   List<String> _dinnerTexts = [];
   List<String> _snackTexts = [];
 
+  // 새벽 4시 기준 날짜 계산 (오늘 날짜)
   DateTime get _dietDate {
     final now = DateTime.now();
     if (now.hour < 4) {
@@ -39,31 +46,39 @@ class _CameraScreenState extends State<CameraScreen> {
   void initState() {
     super.initState();
     _retrieveLostData(); // 안드로이드 앱 전환 복구
-    _loadTempData();     // 🟢 [추가] 앱 껐다 켰을 때 데이터 복구
+    _loadTempData();     // 로컬 임시 저장 데이터 복구
+    _fetchFirebaseData(); // Firebase DB 데이터 불러오기
   }
 
-  // 🟢 [핵심 기능 1] 데이터 불러오기 & 날짜 체크
+  // 1. 파이어베이스에서 오늘 기록 불러오기
+  Future<void> _fetchFirebaseData() async {
+    final data = await DatabaseService().fetchTodayMeals();
+    if (mounted) {
+      setState(() {
+        _savedMeals = data;
+      });
+    }
+  }
+
+  // 2. 로컬 임시 데이터 불러오기
   Future<void> _loadTempData() async {
     final prefs = await SharedPreferences.getInstance();
 
     String? savedDate = prefs.getString('temp_date');
-    // 오늘 기준 날짜 (예: 2025-11-23)
     String todayStr = DateFormat('yyyy-MM-dd').format(_dietDate);
 
-    // 날짜가 다르면(어제 새벽 4시 이전 기록이면) 초기화
+    // 날짜가 다르면(어제 기록이면) 초기화
     if (savedDate != todayStr) {
       await prefs.clear();
       return;
     }
 
-    // 3. 오늘 날짜 기록이면 복구 시작
     setState(() {
       _breakfastTexts = prefs.getStringList('breakfast_texts') ?? [];
       _lunchTexts = prefs.getStringList('lunch_texts') ?? [];
       _dinnerTexts = prefs.getStringList('dinner_texts') ?? [];
       _snackTexts = prefs.getStringList('snack_texts') ?? [];
 
-      // 이미지는 경로(String)로 저장했으므로 다시 XFile로 변환
       _breakfastImages = (prefs.getStringList('breakfast_images') ?? []).map((path) => XFile(path)).toList();
       _lunchImages = (prefs.getStringList('lunch_images') ?? []).map((path) => XFile(path)).toList();
       _dinnerImages = (prefs.getStringList('dinner_images') ?? []).map((path) => XFile(path)).toList();
@@ -71,35 +86,34 @@ class _CameraScreenState extends State<CameraScreen> {
     });
   }
 
-  // 🟢 [핵심 기능 2] 데이터 변경될 때마다 자동 저장
+  // 3. 로컬 임시 데이터 저장하기
   Future<void> _saveTempData() async {
     final prefs = await SharedPreferences.getInstance();
     String todayStr = DateFormat('yyyy-MM-dd').format(_dietDate);
+
     await prefs.setString('temp_date', todayStr);
 
-    // 텍스트 리스트 저장
     await prefs.setStringList('breakfast_texts', _breakfastTexts);
     await prefs.setStringList('lunch_texts', _lunchTexts);
     await prefs.setStringList('dinner_texts', _dinnerTexts);
     await prefs.setStringList('snack_texts', _snackTexts);
 
-    // 이미지 리스트 저장 (경로만 문자열로 저장)
     await prefs.setStringList('breakfast_images', _breakfastImages.map((e) => e.path).toList());
     await prefs.setStringList('lunch_images', _lunchImages.map((e) => e.path).toList());
     await prefs.setStringList('dinner_images', _dinnerImages.map((e) => e.path).toList());
     await prefs.setStringList('snack_images', _snackImages.map((e) => e.path).toList());
   }
 
-  // 기존 안드로이드 복구 로직 (유지)
+  // 안드로이드 프로세스 복구
   Future<void> _retrieveLostData() async {
     final LostDataResponse response = await _picker.retrieveLostData();
     if (response.isEmpty) return;
     final XFile? file = response.file;
     if (file != null) {
       setState(() {
-        _breakfastImages.add(file);
+        _breakfastImages.add(file); // 임시로 아침에 추가
       });
-      _saveTempData(); // 🟢 데이터 변경 시 저장 호출
+      _saveTempData();
     }
   }
 
@@ -119,7 +133,7 @@ class _CameraScreenState extends State<CameraScreen> {
             case '간식': _snackImages.add(pickedFile); break;
           }
         });
-        _saveTempData(); // 🟢 데이터 변경 시 저장 호출
+        _saveTempData();
       }
     } catch (e) {
       print('사진 선택 실패: $e');
@@ -136,7 +150,7 @@ class _CameraScreenState extends State<CameraScreen> {
           content: TextField(
             controller: textController,
             decoration: const InputDecoration(
-              hintText: '예: 현미밥 1공기, 사과 반 쪽',
+              hintText: '예: 현미밥 1공기',
               border: OutlineInputBorder(),
             ),
             maxLines: 3,
@@ -157,7 +171,7 @@ class _CameraScreenState extends State<CameraScreen> {
                       case '간식': _snackTexts.add(textController.text); break;
                     }
                   });
-                  _saveTempData(); // 🟢 데이터 변경 시 저장 호출
+                  _saveTempData();
                 }
                 Navigator.pop(context);
               },
@@ -173,7 +187,9 @@ class _CameraScreenState extends State<CameraScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (BuildContext context) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
@@ -184,13 +200,30 @@ class _CameraScreenState extends State<CameraScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('$mealType 추가하기', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, size: 20), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
                 ],
               ),
               const SizedBox(height: 20),
-              _buildOptionTile(icon: Icons.camera_alt, text: '카메라로 촬영', onTap: () { Navigator.pop(context); _pickImage(mealType, ImageSource.camera); }),
-              _buildOptionTile(icon: Icons.photo_library, text: '이미지 업로드', onTap: () { Navigator.pop(context); _pickImage(mealType, ImageSource.gallery); }),
-              _buildOptionTile(icon: Icons.edit, text: '텍스트로 입력', onTap: () { Navigator.pop(context); _showTextInputDialog(mealType); }),
+              _buildOptionTile(
+                  icon: Icons.camera_alt,
+                  text: '카메라로 촬영',
+                  onTap: () { Navigator.pop(context); _pickImage(mealType, ImageSource.camera); }
+              ),
+              _buildOptionTile(
+                  icon: Icons.photo_library,
+                  text: '이미지 업로드',
+                  onTap: () { Navigator.pop(context); _pickImage(mealType, ImageSource.gallery); }
+              ),
+              _buildOptionTile(
+                  icon: Icons.edit,
+                  text: '텍스트로 입력',
+                  onTap: () { Navigator.pop(context); _showTextInputDialog(mealType); }
+              ),
             ],
           ),
         );
@@ -208,7 +241,6 @@ class _CameraScreenState extends State<CameraScreen> {
     );
   }
 
-  // 삭제 기능 추가 (Chip 삭제 시에도 저장해야 하므로)
   void _removeText(String mealType, String text) {
     setState(() {
       switch (mealType) {
@@ -218,9 +250,10 @@ class _CameraScreenState extends State<CameraScreen> {
         case '간식': _snackTexts.remove(text); break;
       }
     });
-    _saveTempData(); // 🟢 데이터 변경 시 저장 호출
+    _saveTempData();
   }
 
+  // 🟢 분석 시작 버튼 클릭
   void _onAnalyzePressed(String mealType) async {
     List<XFile> targetImages = [];
     List<String> targetTexts = [];
@@ -247,7 +280,9 @@ class _CameraScreenState extends State<CameraScreen> {
 
       if (foodList != null) {
         if (!mounted) return;
-        Navigator.push(
+
+        // 화면 이동 (갔다 오면 DB 다시 조회)
+        await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => EditFoodScreen(
@@ -256,15 +291,23 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
         );
+        _fetchFirebaseData(); // 돌아왔을 때 새로고침
       } else {
         throw Exception('음식을 식별하지 못했습니다.');
       }
     } catch (e) {
       if (mounted) {
         setState(() { _isAnalyzing = false; });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('오류가 발생했습니다: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('오류: $e')));
       }
     }
+  }
+
+  // 🟢 수정하기 버튼 클릭 (요약 카드 지우기)
+  void _onModifyPressed(String mealType) {
+    setState(() {
+      _savedMeals.remove(mealType);
+    });
   }
 
   @override
@@ -280,24 +323,14 @@ class _CameraScreenState extends State<CameraScreen> {
             title: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 1. 날짜
                 Text(
                   '$dateDisplay 식단',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
                 ),
                 const SizedBox(height: 4),
-                // 2. 기준 시간 안내
                 const Text(
                   '새벽 4시 ~ 익일 새벽 4시 기준',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
-                    fontWeight: FontWeight.normal,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.normal),
                 ),
               ],
             ),
@@ -305,6 +338,7 @@ class _CameraScreenState extends State<CameraScreen> {
           body: SingleChildScrollView(
             child: Column(
               children: [
+                const SizedBox(height: 10),
                 _buildMealSection('아침', _breakfastImages, _breakfastTexts),
                 const Divider(height: 1, thickness: 1),
                 _buildMealSection('점심', _lunchImages, _lunchTexts),
@@ -317,6 +351,7 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
         ),
+
         if (_isAnalyzing)
           Container(
             color: Colors.black.withOpacity(0.5),
@@ -335,7 +370,11 @@ class _CameraScreenState extends State<CameraScreen> {
     );
   }
 
+  // 🟢 끼니 섹션 빌더 (분기 처리)
   Widget _buildMealSection(String title, List<XFile> images, List<String> textItems) {
+    bool isSaved = _savedMeals.containsKey(title);
+    Map<String, dynamic>? savedData = isSaved ? _savedMeals[title] : null;
+
     return Container(
       padding: const EdgeInsets.all(16),
       width: double.infinity,
@@ -347,59 +386,152 @@ class _CameraScreenState extends State<CameraScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              IconButton(onPressed: () => _showAddOptions(context, title), icon: const Icon(Icons.add_circle_outline), iconSize: 28, color: Colors.blue),
+              isSaved
+                  ? TextButton.icon(
+                onPressed: () => _onModifyPressed(title),
+                icon: const Icon(Icons.edit, size: 16, color: Colors.grey),
+                label: const Text('수정하기', style: TextStyle(color: Colors.grey)),
+              )
+                  : IconButton(
+                onPressed: () => _showAddOptions(context, title),
+                icon: const Icon(Icons.add_circle_outline),
+                iconSize: 28,
+                color: Colors.blue,
+              ),
             ],
           ),
           const SizedBox(height: 10),
-          (images.isEmpty && textItems.isEmpty)
-              ? Container(height: 60, alignment: Alignment.centerLeft, child: Text('$title을 기록해 보세요.', style: TextStyle(color: Colors.grey[400])))
-              : Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (images.isNotEmpty)
-                SizedBox(
-                  height: 100,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: images.length,
-                    itemBuilder: (context, index) {
-                      return Container(
-                        width: 100,
-                        margin: const EdgeInsets.only(right: 10),
-                        decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8), image: DecorationImage(image: FileImage(File(images[index].path)), fit: BoxFit.cover)),
-                      );
-                    },
-                  ),
-                ),
-              if (images.isNotEmpty && textItems.isNotEmpty) const SizedBox(height: 10),
-              if (textItems.isNotEmpty)
-                Wrap(
-                  spacing: 8.0,
-                  runSpacing: 4.0,
-                  children: textItems.map((text) {
-                    return Chip(
-                      label: Text(text),
-                      backgroundColor: Colors.orange[50],
-                      side: BorderSide.none,
-                      onDeleted: () => _removeText(title, text), // 🟢 삭제 함수 연결
-                    );
-                  }).toList(),
-                ),
-            ],
-          ),
-          const SizedBox(height: 15),
-          if (images.isNotEmpty || textItems.isNotEmpty)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => _onAnalyzePressed(title),
-                icon: const Icon(Icons.analytics_outlined, size: 18),
-                label: const Text('분석 시작'),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[50], foregroundColor: Colors.blue[700], elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), padding: const EdgeInsets.symmetric(vertical: 12)),
-              ),
-            ),
+
+          // 저장됨 ? 요약카드 : 입력폼
+          if (isSaved && savedData != null)
+            _buildSummaryCard(savedData)
+          else
+            _buildInputForm(title, images, textItems),
         ],
       ),
+    );
+  }
+
+  // 🟢 요약 카드 UI
+  Widget _buildSummaryCard(Map<String, dynamic> data) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.shade100),
+        boxShadow: [
+          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${data['totalCalories']} kcal',
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildMacroInfo('탄수화물', '${data['totalCarbs']}g'),
+              const SizedBox(width: 16),
+              _buildMacroInfo('단백질', '${data['totalProtein']}g'),
+              const SizedBox(width: 16),
+              _buildMacroInfo('지방', '${data['totalFat']}g'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMacroInfo(String label, String val) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        Text(val, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  // 🟢 입력 폼 UI (기존 로직 분리)
+  Widget _buildInputForm(String title, List<XFile> images, List<String> textItems) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        (images.isEmpty && textItems.isEmpty)
+            ? Container(
+          height: 60,
+          alignment: Alignment.centerLeft,
+          child: Text('$title을 기록해 보세요.', style: TextStyle(color: Colors.grey[400])),
+        )
+            : Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (images.isNotEmpty)
+              SizedBox(
+                height: 100,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: images.length,
+                  itemBuilder: (context, index) {
+                    return Container(
+                      width: 100,
+                      margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(8),
+                        image: DecorationImage(
+                          image: FileImage(File(images[index].path)),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            if (images.isNotEmpty && textItems.isNotEmpty) const SizedBox(height: 10),
+            if (textItems.isNotEmpty)
+              Wrap(
+                spacing: 8.0,
+                runSpacing: 4.0,
+                children: textItems.map((text) {
+                  return Chip(
+                    label: Text(text),
+                    backgroundColor: Colors.orange[50],
+                    side: BorderSide.none,
+                    onDeleted: () => _removeText(title, text),
+                  );
+                }).toList(),
+              ),
+          ],
+        ),
+        const SizedBox(height: 15),
+        if (images.isNotEmpty || textItems.isNotEmpty)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _onAnalyzePressed(title),
+              icon: const Icon(Icons.analytics_outlined, size: 18),
+              label: const Text('분석 시작'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue[50],
+                foregroundColor: Colors.blue[700],
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

@@ -6,7 +6,7 @@ import '../api_config.dart';
 
 class GeminiService {
   final model = GenerativeModel(
-    model: 'gemini-2.5-flash',
+    model: 'gemini-2.5-pro',
     apiKey: geminiApiKey,
     generationConfig: GenerationConfig(
       responseMimeType: 'application/json',
@@ -20,7 +20,9 @@ class GeminiService {
 
       final promptText = """
         이 음식 사진들과 메모를 보고, 포함된 모든 음식의 '이름'과 '양'을 추정해줘.
-        양을 추정할 때는 대략적인 gram 수를 꼭 포함해줘
+        한 사진에 여러가지 음식이 포함되어 있거나, 급식처럼 보일 때에는, 양을 추정할 때 보수적으로 접근해.
+   
+        양을 추정할 때는 대략적인 gram 수를 꼭 포함해줘.
         사용자 메모($userNotes)에 있는 음식도 포함해.
         
         반드시 아래와 같은 JSON 배열(List<Map>) 형식으로만 출력해.
