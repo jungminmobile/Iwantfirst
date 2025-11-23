@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // 🟢 패키지 추가됨
+import 'package:intl/intl.dart'; // 🟢 날짜 비교용 (없으면 flutter pub add intl)
 import 'edit_food_screen.dart';
 import '../services/gemini_service.dart';
 
@@ -13,25 +15,82 @@ class CameraScreen extends StatefulWidget {
 
 class _CameraScreenState extends State<CameraScreen> {
   final ImagePicker _picker = ImagePicker();
-
-  // 🟢 [추가] 로딩 상태 변수 (분석 중일 때 true)
   bool _isAnalyzing = false;
 
-  final List<XFile> _breakfastImages = [];
-  final List<XFile> _lunchImages = [];
-  final List<XFile> _dinnerImages = [];
-  final List<XFile> _snackImages = [];
-  final List<String> _breakfastTexts = [];
-  final List<String> _lunchTexts = [];
-  final List<String> _dinnerTexts = [];
-  final List<String> _snackTexts = [];
+  // 데이터 리스트들
+  List<XFile> _breakfastImages = [];
+  List<XFile> _lunchImages = [];
+  List<XFile> _dinnerImages = [];
+  List<XFile> _snackImages = [];
+  List<String> _breakfastTexts = [];
+  List<String> _lunchTexts = [];
+  List<String> _dinnerTexts = [];
+  List<String> _snackTexts = [];
+
+  DateTime get _dietDate {
+    final now = DateTime.now();
+    if (now.hour < 4) {
+      return now.subtract(const Duration(days: 1));
+    }
+    return now;
+  }
 
   @override
   void initState() {
     super.initState();
-    _retrieveLostData();
+    _retrieveLostData(); // 안드로이드 앱 전환 복구
+    _loadTempData();     // 🟢 [추가] 앱 껐다 켰을 때 데이터 복구
   }
 
+  // 🟢 [핵심 기능 1] 데이터 불러오기 & 날짜 체크
+  Future<void> _loadTempData() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    String? savedDate = prefs.getString('temp_date');
+    // 오늘 기준 날짜 (예: 2025-11-23)
+    String todayStr = DateFormat('yyyy-MM-dd').format(_dietDate);
+
+    // 날짜가 다르면(어제 새벽 4시 이전 기록이면) 초기화
+    if (savedDate != todayStr) {
+      await prefs.clear();
+      return;
+    }
+
+    // 3. 오늘 날짜 기록이면 복구 시작
+    setState(() {
+      _breakfastTexts = prefs.getStringList('breakfast_texts') ?? [];
+      _lunchTexts = prefs.getStringList('lunch_texts') ?? [];
+      _dinnerTexts = prefs.getStringList('dinner_texts') ?? [];
+      _snackTexts = prefs.getStringList('snack_texts') ?? [];
+
+      // 이미지는 경로(String)로 저장했으므로 다시 XFile로 변환
+      _breakfastImages = (prefs.getStringList('breakfast_images') ?? []).map((path) => XFile(path)).toList();
+      _lunchImages = (prefs.getStringList('lunch_images') ?? []).map((path) => XFile(path)).toList();
+      _dinnerImages = (prefs.getStringList('dinner_images') ?? []).map((path) => XFile(path)).toList();
+      _snackImages = (prefs.getStringList('snack_images') ?? []).map((path) => XFile(path)).toList();
+    });
+  }
+
+  // 🟢 [핵심 기능 2] 데이터 변경될 때마다 자동 저장
+  Future<void> _saveTempData() async {
+    final prefs = await SharedPreferences.getInstance();
+    String todayStr = DateFormat('yyyy-MM-dd').format(_dietDate);
+    await prefs.setString('temp_date', todayStr);
+
+    // 텍스트 리스트 저장
+    await prefs.setStringList('breakfast_texts', _breakfastTexts);
+    await prefs.setStringList('lunch_texts', _lunchTexts);
+    await prefs.setStringList('dinner_texts', _dinnerTexts);
+    await prefs.setStringList('snack_texts', _snackTexts);
+
+    // 이미지 리스트 저장 (경로만 문자열로 저장)
+    await prefs.setStringList('breakfast_images', _breakfastImages.map((e) => e.path).toList());
+    await prefs.setStringList('lunch_images', _lunchImages.map((e) => e.path).toList());
+    await prefs.setStringList('dinner_images', _dinnerImages.map((e) => e.path).toList());
+    await prefs.setStringList('snack_images', _snackImages.map((e) => e.path).toList());
+  }
+
+  // 기존 안드로이드 복구 로직 (유지)
   Future<void> _retrieveLostData() async {
     final LostDataResponse response = await _picker.retrieveLostData();
     if (response.isEmpty) return;
@@ -40,6 +99,7 @@ class _CameraScreenState extends State<CameraScreen> {
       setState(() {
         _breakfastImages.add(file);
       });
+      _saveTempData(); // 🟢 데이터 변경 시 저장 호출
     }
   }
 
@@ -59,6 +119,7 @@ class _CameraScreenState extends State<CameraScreen> {
             case '간식': _snackImages.add(pickedFile); break;
           }
         });
+        _saveTempData(); // 🟢 데이터 변경 시 저장 호출
       }
     } catch (e) {
       print('사진 선택 실패: $e');
@@ -96,6 +157,7 @@ class _CameraScreenState extends State<CameraScreen> {
                       case '간식': _snackTexts.add(textController.text); break;
                     }
                   });
+                  _saveTempData(); // 🟢 데이터 변경 시 저장 호출
                 }
                 Navigator.pop(context);
               },
@@ -111,9 +173,7 @@ class _CameraScreenState extends State<CameraScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (BuildContext context) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
@@ -124,30 +184,13 @@ class _CameraScreenState extends State<CameraScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('$mealType 추가하기', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, size: 20),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, size: 20), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
                 ],
               ),
               const SizedBox(height: 20),
-              _buildOptionTile(
-                  icon: Icons.camera_alt,
-                  text: '카메라로 촬영',
-                  onTap: () { Navigator.pop(context); _pickImage(mealType, ImageSource.camera); }
-              ),
-              _buildOptionTile(
-                  icon: Icons.photo_library,
-                  text: '이미지 업로드',
-                  onTap: () { Navigator.pop(context); _pickImage(mealType, ImageSource.gallery); }
-              ),
-              _buildOptionTile(
-                  icon: Icons.edit,
-                  text: '텍스트로 입력',
-                  onTap: () { Navigator.pop(context); _showTextInputDialog(mealType); }
-              ),
+              _buildOptionTile(icon: Icons.camera_alt, text: '카메라로 촬영', onTap: () { Navigator.pop(context); _pickImage(mealType, ImageSource.camera); }),
+              _buildOptionTile(icon: Icons.photo_library, text: '이미지 업로드', onTap: () { Navigator.pop(context); _pickImage(mealType, ImageSource.gallery); }),
+              _buildOptionTile(icon: Icons.edit, text: '텍스트로 입력', onTap: () { Navigator.pop(context); _showTextInputDialog(mealType); }),
             ],
           ),
         );
@@ -165,9 +208,20 @@ class _CameraScreenState extends State<CameraScreen> {
     );
   }
 
-  // 🟢 [수정됨] 실제 API 호출 및 화면 이동 로직 구현
+  // 삭제 기능 추가 (Chip 삭제 시에도 저장해야 하므로)
+  void _removeText(String mealType, String text) {
+    setState(() {
+      switch (mealType) {
+        case '아침': _breakfastTexts.remove(text); break;
+        case '점심': _lunchTexts.remove(text); break;
+        case '저녁': _dinnerTexts.remove(text); break;
+        case '간식': _snackTexts.remove(text); break;
+      }
+    });
+    _saveTempData(); // 🟢 데이터 변경 시 저장 호출
+  }
+
   void _onAnalyzePressed(String mealType) async {
-    // 1. 해당 끼니의 데이터 가져오기
     List<XFile> targetImages = [];
     List<String> targetTexts = [];
 
@@ -178,67 +232,75 @@ class _CameraScreenState extends State<CameraScreen> {
       case '간식': targetImages = _snackImages; targetTexts = _snackTexts; break;
     }
 
-    // 데이터 없으면 중단
     if (targetImages.isEmpty && targetTexts.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('분석할 사진이나 텍스트가 없습니다.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('분석할 사진이나 텍스트가 없습니다.')));
       return;
     }
 
-    // 2. 로딩 시작
-    setState(() {
-      _isAnalyzing = true;
-    });
+    setState(() { _isAnalyzing = true; });
 
     try {
       final gemini = GeminiService();
-
-      // 3. 1단계 분석 요청 (이름과 양 추정)
       final foodList = await gemini.identifyFoodList(targetImages, targetTexts);
 
-      // 로딩 종료 (화면 이동 전)
-      if (mounted) {
-        setState(() {
-          _isAnalyzing = false;
-        });
-      }
+      if (mounted) { setState(() { _isAnalyzing = false; }); }
 
       if (foodList != null) {
-        // 4. 성공 시 EditFoodScreen으로 이동
         if (!mounted) return;
         Navigator.push(
           context,
           MaterialPageRoute(
-            // 받아온 리스트를 다음 화면으로 넘겨줌
-            builder: (context) => EditFoodScreen(initialFoods: foodList, mealType: mealType,),
+            builder: (context) => EditFoodScreen(
+              initialFoods: foodList,
+              mealType: mealType,
+            ),
           ),
         );
       } else {
         throw Exception('음식을 식별하지 못했습니다.');
       }
     } catch (e) {
-      // 에러 처리
       if (mounted) {
-        setState(() {
-          _isAnalyzing = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('오류가 발생했습니다: $e')),
-        );
+        setState(() { _isAnalyzing = false; });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('오류가 발생했습니다: $e')));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // 🟢 [수정됨] Stack을 사용하여 로딩 화면을 덮어씌움
+    String dateDisplay = DateFormat('M월 d일').format(_dietDate);
+
     return Stack(
       children: [
         Scaffold(
           appBar: AppBar(
-            title: const Text('식단 기록'),
             centerTitle: true,
+            toolbarHeight: 80,
+            title: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 1. 날짜
+                Text(
+                  '$dateDisplay 식단',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                // 2. 기준 시간 안내
+                const Text(
+                  '새벽 4시 ~ 익일 새벽 4시 기준',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
           ),
           body: SingleChildScrollView(
             child: Column(
@@ -255,21 +317,16 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
         ),
-
-        // 🟢 [추가됨] 로딩 인디케이터 오버레이
         if (_isAnalyzing)
           Container(
-            color: Colors.black.withOpacity(0.5), // 반투명 검은 배경
+            color: Colors.black.withOpacity(0.5),
             child: const Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   CircularProgressIndicator(color: Colors.white),
                   SizedBox(height: 20),
-                  Text(
-                    'AI가 음식을 확인하고 있어요...',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
+                  Text('AI가 음식을 확인하고 있어요...', style: TextStyle(color: Colors.white, fontSize: 16)),
                 ],
               ),
             ),
@@ -290,22 +347,12 @@ class _CameraScreenState extends State<CameraScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              IconButton(
-                onPressed: () => _showAddOptions(context, title),
-                icon: const Icon(Icons.add_circle_outline),
-                iconSize: 28,
-                color: Colors.blue,
-              ),
+              IconButton(onPressed: () => _showAddOptions(context, title), icon: const Icon(Icons.add_circle_outline), iconSize: 28, color: Colors.blue),
             ],
           ),
           const SizedBox(height: 10),
-
           (images.isEmpty && textItems.isEmpty)
-              ? Container(
-            height: 60,
-            alignment: Alignment.centerLeft,
-            child: Text('$title을 기록해 보세요.', style: TextStyle(color: Colors.grey[400])),
-          )
+              ? Container(height: 60, alignment: Alignment.centerLeft, child: Text('$title을 기록해 보세요.', style: TextStyle(color: Colors.grey[400])))
               : Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -319,21 +366,12 @@ class _CameraScreenState extends State<CameraScreen> {
                       return Container(
                         width: 100,
                         margin: const EdgeInsets.only(right: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(8),
-                          image: DecorationImage(
-                            image: FileImage(File(images[index].path)),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
+                        decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8), image: DecorationImage(image: FileImage(File(images[index].path)), fit: BoxFit.cover)),
                       );
                     },
                   ),
                 ),
-
               if (images.isNotEmpty && textItems.isNotEmpty) const SizedBox(height: 10),
-
               if (textItems.isNotEmpty)
                 Wrap(
                   spacing: 8.0,
@@ -343,19 +381,13 @@ class _CameraScreenState extends State<CameraScreen> {
                       label: Text(text),
                       backgroundColor: Colors.orange[50],
                       side: BorderSide.none,
-                      onDeleted: () {
-                        setState(() {
-                          textItems.remove(text);
-                        });
-                      },
+                      onDeleted: () => _removeText(title, text), // 🟢 삭제 함수 연결
                     );
                   }).toList(),
                 ),
             ],
           ),
-
           const SizedBox(height: 15),
-
           if (images.isNotEmpty || textItems.isNotEmpty)
             SizedBox(
               width: double.infinity,
@@ -363,15 +395,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 onPressed: () => _onAnalyzePressed(title),
                 icon: const Icon(Icons.analytics_outlined, size: 18),
                 label: const Text('분석 시작'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[50],
-                  foregroundColor: Colors.blue[700],
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[50], foregroundColor: Colors.blue[700], elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), padding: const EdgeInsets.symmetric(vertical: 12)),
               ),
             ),
         ],
