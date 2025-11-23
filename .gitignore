@@ -124,3 +124,6 @@ app.*.symbols
 *.iws
 *.iml
 *.ipr
+
+# API Key
+lib/api_config.dart
