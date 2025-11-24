@@ -253,6 +253,18 @@ class _CameraScreenState extends State<CameraScreen> {
     _saveTempData();
   }
 
+  void _removeImage(String mealType, XFile image) {
+    setState(() {
+      switch (mealType) {
+        case '아침': _breakfastImages.remove(image); break;
+        case '점심': _lunchImages.remove(image); break;
+        case '저녁': _dinnerImages.remove(image); break;
+        case '간식': _snackImages.remove(image); break;
+      }
+    });
+    _saveTempData(); // 변경사항 즉시 저장
+  }
+
   // 🟢 분석 시작 버튼 클릭
   void _onAnalyzePressed(String mealType) async {
     List<XFile> targetImages = [];
@@ -478,22 +490,46 @@ class _CameraScreenState extends State<CameraScreen> {
           children: [
             if (images.isNotEmpty)
               SizedBox(
-                height: 100,
+                height: 110,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: images.length,
                   itemBuilder: (context, index) {
-                    return Container(
-                      width: 100,
-                      margin: const EdgeInsets.only(right: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(8),
-                        image: DecorationImage(
-                          image: FileImage(File(images[index].path)),
-                          fit: BoxFit.cover,
+                    return Stack(
+                      children: [
+                        Container(
+                          width: 100,
+                          height: 100,
+                          margin: const EdgeInsets.only(right: 10, top: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            borderRadius: BorderRadius.circular(8),
+                            image: DecorationImage(
+                              image: FileImage(File(images[index].path)),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
                         ),
-                      ),
+                        Positioned(
+                          right: 5,
+                          top: 0,
+                          child: GestureDetector(
+                            onTap: () => _removeImage(title, images[index]),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.black54, // 반투명 검은 배경
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.close,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -506,7 +542,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 children: textItems.map((text) {
                   return Chip(
                     label: Text(text),
-                    backgroundColor: Colors.orange[50],
+                    backgroundColor: Color(0x44adff2f),
                     side: BorderSide.none,
                     onDeleted: () => _removeText(title, text),
                   );

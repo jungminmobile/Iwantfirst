@@ -150,6 +150,7 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
                     if (isAnalyzed) {
                       final food = _analyzedFoods[index];
                       return ListTile(
+                        key: ObjectKey(food),
                         title: Text(food.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -172,6 +173,8 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
                       );
                     } else {
                       return ListTile(
+                        key: ObjectKey(_foodList[index]),
+
                         title: TextFormField(
                           initialValue: _foodList[index]['name'],
                           decoration: const InputDecoration(labelText: '음식 이름'),
