@@ -404,11 +404,10 @@ class _CameraScreenState extends State<CameraScreen> {
                 icon: const Icon(Icons.edit, size: 16, color: Colors.grey),
                 label: const Text('수정하기', style: TextStyle(color: Colors.grey)),
               )
-                  : IconButton(
-                onPressed: () => _showAddOptions(context, title),
-                icon: const Icon(Icons.add_circle_outline),
-                iconSize: 28,
-                color: Colors.blue,
+                  : ExpandableFab(
+                onCameraTap: () => _pickImage(title, ImageSource.camera),
+                onGalleryTap: () => _pickImage(title, ImageSource.gallery),
+                onTextTap: () => _showTextInputDialog(title),
               ),
             ],
           ),
@@ -542,7 +541,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 children: textItems.map((text) {
                   return Chip(
                     label: Text(text),
-                    backgroundColor: Color(0x44adff2f),
+                    backgroundColor: Color(0x30adff2f),
                     side: BorderSide.none,
                     onDeleted: () => _removeText(title, text),
                   );
@@ -568,6 +567,105 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
       ],
+    );
+  }
+}
+
+
+// + x 위젯!
+class ExpandableFab extends StatefulWidget {
+  final VoidCallback onCameraTap;
+  final VoidCallback onGalleryTap;
+  final VoidCallback onTextTap;
+
+  const ExpandableFab({
+    super.key,
+    required this.onCameraTap,
+    required this.onGalleryTap,
+    required this.onTextTap,
+  });
+
+  @override
+  State<ExpandableFab> createState() => _ExpandableFabState();
+}
+
+class _ExpandableFabState extends State<ExpandableFab> with SingleTickerProviderStateMixin {
+  bool _isOpen = false;
+
+  void _toggle() {
+    setState(() {
+      _isOpen = !_isOpen;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 1. 펼쳐지는 아이콘들 (왼쪽에 배치)
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          child: SizedBox(
+            // 닫혀있으면 너비 0, 열리면 내용물만큼
+            width: _isOpen ? null : 0,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildActionBtn(Icons.camera_alt, '카메라', widget.onCameraTap),
+                const SizedBox(width: 8),
+                _buildActionBtn(Icons.photo_library, '갤러리', widget.onGalleryTap),
+                const SizedBox(width: 8),
+                _buildActionBtn(Icons.edit, '텍스트', widget.onTextTap),
+                const SizedBox(width: 12), // + 버튼과의 간격
+              ],
+            ),
+          ),
+        ),
+
+        // 2. 메인 토글 버튼 (+ 회전 -> x)
+        GestureDetector(
+          onTap: _toggle,
+          child: AnimatedRotation(
+            turns: _isOpen ? 0.125 : 0, // 0.125바퀴 = 45도 회전 (+가 x가 됨)
+            duration: const Duration(milliseconds: 200),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _isOpen ? Colors.grey[200] : Colors.blue[50], // 열리면 회색, 닫히면 파란색
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.add,
+                size: 18,
+                color: _isOpen ? Colors.grey : Colors.blue,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 작은 액션 버튼 디자인
+  Widget _buildActionBtn(IconData icon, String tooltip, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: () {
+        _toggle(); // 버튼 누르면 메뉴 닫기
+        onTap();   // 기능 실행
+      },
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.blue, // 파란색 배경
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))
+          ],
+        ),
+        child: Icon(icon, size: 20, color: Colors.white),
+      ),
     );
   }
 }
