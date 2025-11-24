@@ -1,0 +1,56 @@
+name: hackton_2025_2
+description: "A new Flutter project."
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.0
+
+#개발중 필요한 패키지나 라이브러리 나열
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 기본 아이콘
+  cupertino_icons: ^1.0.6
+
+  # Firebase
+  firebase_core: ^4.2.1
+  firebase_auth: ^6.1.2
+  cloud_firestore: ^6.1.0
+  google_sign_in: ^6.2.1  # ★★★ 이 줄이 추가되었습니다 ★★★
+
+  # AI & 이미지
+  google_generative_ai: ^0.4.0
+  image_picker: ^1.2.1
+
+  # UI & 유틸
+  fl_chart: ^0.68.0
+  intl: ^0.20.2
+  table_calendar: ^3.1.2
+  flutter_spinkit: ^5.2.1
+  shared_preferences: ^2.5.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+flutter:
+  uses-material-design: true
+
+  # assets:
+  #   - images/a_dot_burr.jpeg
+  #   - images/a_dot_ham.jpeg
+
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
