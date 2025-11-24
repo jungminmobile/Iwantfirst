@@ -25,11 +25,11 @@ class _StatsScreenState extends State<StatsScreen> {
     'fat': true,
   };
 
-  // 🎯 [중요] 목표 섭취량 (나중에 DB에서 불러오거나 설정값으로 대체하세요)
-  final double _goalCal = 2500.0;
-  final double _goalCarbs = 300.0;
-  final double _goalProtein = 100.0;
-  final double _goalFat = 60.0;
+  // 🎯 목표 섭취량 (기본값 설정해두고, 서버에서 가져와서 덮어씀)
+  double _goalCal = 2000.0;
+  double _goalCarbs = 250.0;
+  double _goalProtein = 100.0;
+  double _goalFat = 60.0;
 
   // ⏳ 로딩 상태
   bool _isLoading = true;
@@ -44,19 +44,44 @@ class _StatsScreenState extends State<StatsScreen> {
     _fetchMonthlyData();
   }
 
-  // 🔥 파이어베이스 데이터 가져오기 (기존 로직 유지)
+  // 🔥 파이어베이스 데이터 가져오기 (목표 + 식단)
   Future<void> _fetchMonthlyData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     try {
+      // 1. [추가됨] 사용자의 '목표(Goals)' 먼저 가져오기
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (userDoc.exists && userDoc.data()!.containsKey('goals')) {
+        var goals = userDoc.data()!['goals'];
+        if (mounted) {
+          setState(() {
+            // DB에 있는 값으로 목표 변수 업데이트 (없으면 기본값 유지)
+            if (goals['target_calories'] != null) _goalCal = (goals['target_calories'] as num).toDouble();
+
+            // 탄단지 목표가 DB에 따로 없으면 칼로리 기반으로 자동 계산 (비율 예시: 5:3:2)
+            // 만약 DB에 저장하고 있다면 아래처럼 가져오면 됩니다.
+            // if (goals['target_carbs'] != null) _goalCarbs = (goals['target_carbs'] as num).toDouble();
+
+            // (임시) 칼로리 기반 자동 계산 (필요 없으면 지우세요)
+            _goalCarbs = (_goalCal * 0.5) / 4;   // 50%
+            _goalProtein = (_goalCal * 0.3) / 4; // 30%
+            _goalFat = (_goalCal * 0.2) / 9;     // 20%
+          });
+        }
+      }
+
+      // 2. 식단 데이터 가져오기 (collectionGroup)
+      // *주의: 파이어베이스 콘솔에서 '보안 규칙'이 설정되어 있어야 에러가 안 납니다.
       final snapshot = await FirebaseFirestore.instance.collectionGroup('meals').get();
 
       Map<String, Map<String, double>> tempStats = {};
 
       for (var doc in snapshot.docs) {
+        // 내 데이터인지 확인
         if (!doc.reference.path.contains(user.uid)) continue;
 
+        // 날짜 확인
         final grandParent = doc.reference.parent.parent;
         if (grandParent == null) continue;
         String dateStr = grandParent.id;
@@ -148,17 +173,25 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  // --- 📊 그래프 섹션 수정됨 ---
+  // --- 📊 그래프 섹션 ---
   Widget _buildChartSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('최근 7일 달성률 (%)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('최근 7일 달성률 (%)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                  '목표: ${_goalCal.toInt()} kcal',
+                  style: const TextStyle(color: Colors.grey, fontSize: 12)
+              ),
+            ],
+          ),
           const SizedBox(height: 15),
 
-          // 1. 4개의 필터 버튼 (Row + Wrap)
           Wrap(
             spacing: 8.0,
             children: [
@@ -171,11 +204,10 @@ class _StatsScreenState extends State<StatsScreen> {
 
           const SizedBox(height: 20),
 
-          // 2. 꺾은선 그래프
           SizedBox(
             height: 250,
             child: LineChart(
-              _buildLineChartData(), // 통합된 차트 데이터 생성 함수
+              _buildLineChartData(),
             ),
           ),
         ],
@@ -183,13 +215,12 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  // 필터 버튼 위젯 (토글 방식)
   Widget _buildFilterButton(String label, String key, Color color) {
     bool isActive = _chartVisibility[key]!;
     return GestureDetector(
       onTap: () {
         setState(() {
-          _chartVisibility[key] = !isActive; // 토글
+          _chartVisibility[key] = !isActive;
         });
       },
       child: Chip(
@@ -209,39 +240,29 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  // --- 📈 통합 그래프 데이터 생성 (백분율 + 툴팁) ---
+  // --- 📈 통합 그래프 데이터 생성 ---
   LineChartData _buildLineChartData() {
     return LineChartData(
-      // 1. 그리드 설정
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
-        horizontalInterval: 50, // 50% 단위로 줄 긋기
+        horizontalInterval: 50,
       ),
 
-      // 2. 툴팁 설정 (터치 시 퍼센트 + 실제값 표시)
       lineTouchData: LineTouchData(
         touchTooltipData: LineTouchTooltipData(
           fitInsideHorizontally: true,
           fitInsideVertically: true,
-          // tooltipBgColor: Colors.blueGrey.withOpacity(0.8), // 구버전
           getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
             return touchedBarSpots.map((barSpot) {
-              // 인덱스로 날짜 찾기 (역순 계산 필요 없음, spots 생성시 처리)
               int dayIndex = 6 - barSpot.x.toInt();
               DateTime date = DateTime.now().subtract(Duration(days: dayIndex));
               String dateKey = _formatDate(date);
-
-              // 어떤 데이터인지 색깔로 판별하거나 barIndex로 판별
-              // barSpot.barIndex를 사용해 어떤 영양소인지 찾을 수도 있지만,
-              // 여기서는 간단히 현재 spot의 값을 역산하거나 다시 가져옴.
 
               String label = '';
               double realValue = 0;
               String unit = '';
 
-              // *주의: 보여지는 순서에 따라 매칭해야 함. (복잡하므로 색상으로 매칭 권장)
-              // 여기서는 편의상 값을 다시 조회
               var dailyData = _dailyStats[dateKey];
               Color color = barSpot.bar.color ?? Colors.black;
 
@@ -272,17 +293,16 @@ class _StatsScreenState extends State<StatsScreen> {
         ),
       ),
 
-      titlesData: _buildTitles(), // 축 타이틀
+      titlesData: _buildTitles(),
       borderData: FlBorderData(show: false),
 
-      // 3. 목표 라인 (100% 점선)
       extraLinesData: ExtraLinesData(
         horizontalLines: [
           HorizontalLine(
             y: 100,
             color: Colors.black54,
             strokeWidth: 1,
-            dashArray: [5, 5], // 점선 패턴
+            dashArray: [5, 5],
             label: HorizontalLineLabel(
               show: true,
               alignment: Alignment.topRight,
@@ -294,7 +314,6 @@ class _StatsScreenState extends State<StatsScreen> {
         ],
       ),
 
-      // 4. 실제 라인 데이터들
       lineBarsData: [
         if (_chartVisibility['cal']!) _buildLine(Colors.redAccent, 'cal', _goalCal),
         if (_chartVisibility['carbs']!) _buildLine(Colors.green, 'carbs', _goalCarbs),
@@ -302,24 +321,15 @@ class _StatsScreenState extends State<StatsScreen> {
         if (_chartVisibility['fat']!) _buildLine(Colors.orange, 'fat', _goalFat),
       ],
 
-      // y축 범위 설정 (최소 0, 최대는 데이터에 따라 유동적이지만 최소 120%까지 확보)
       minY: 0,
-      maxY: _calcMaxY(),
+      maxY: 160,
     );
   }
 
-  double _calcMaxY() {
-    // 데이터 중 가장 높은 퍼센트를 찾아서 y축 높이 조절
-    double maxP = 120; // 기본 120%
-    // (복잡하면 그냥 null로 두면 자동조절됨, 여기선 150으로 고정 추천)
-    return 160;
-  }
-
-  // 라인 하나 생성하는 함수
   LineChartBarData _buildLine(Color color, String key, double goal) {
     return LineChartBarData(
       spots: _getPercentageSpots(key, goal),
-      isCurved: false, // 직선
+      isCurved: false,
       color: color,
       barWidth: 3,
       isStrokeCapRound: true,
@@ -334,7 +344,6 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  // 절대값 -> 퍼센트 변환 로직
   List<FlSpot> _getPercentageSpots(String key, double goal) {
     List<FlSpot> spots = [];
     for (int i = 6; i >= 0; i--) {
@@ -342,9 +351,7 @@ class _StatsScreenState extends State<StatsScreen> {
       String dateKey = _formatDate(date);
       double value = _dailyStats[dateKey]?[key] ?? 0;
 
-      // 퍼센트 계산 (value / goal * 100)
       double percentage = (goal == 0) ? 0 : (value / goal * 100);
-
       spots.add(FlSpot((6 - i).toDouble(), percentage));
     }
     return spots;
@@ -373,7 +380,7 @@ class _StatsScreenState extends State<StatsScreen> {
         sideTitles: SideTitles(
           showTitles: true,
           reservedSize: 40,
-          interval: 50, // 50, 100, 150 ...
+          interval: 50,
           getTitlesWidget: (value, meta) {
             if (value == 0) return const SizedBox.shrink();
             return Text('${value.toInt()}%', style: const TextStyle(color: Colors.grey, fontSize: 10));
@@ -385,13 +392,12 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  // --- 나머지 위젯들 (캘린더 등) ---
+  // --- 📅 캘린더 등 나머지 위젯 ---
 
   Widget _buildCalendarSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: TableCalendar(
-        availableGestures: AvailableGestures.horizontalSwipe,
         locale: 'ko_KR',
         firstDay: DateTime.utc(2024, 1, 1),
         lastDay: DateTime.utc(2030, 12, 31),
