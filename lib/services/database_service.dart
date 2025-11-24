@@ -1,38 +1,35 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // 👈 [추가됨] 사용자 인증 정보 접근을 위해 필요
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import '../models/food_item.dart'; // 👈 기존에 사용하시던 FoodItem 모델
+import '../models/food_item.dart';
 
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance; // 👈 [추가됨] FirebaseAuth 인스턴스
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // 현재 로그인된 사용자의 UID를 가져오는 헬퍼 함수
   String? getUserId() {
-    // 현재 로그인된 유저 객체에서 UID를 반환합니다.
     return _auth.currentUser?.uid;
   }
 
-  // 🟢 새벽 4시 기준 날짜 계산 함수
+  // 새벽 4시 기준 날짜 계산 함수
   String getTodayDate() {
     final now = DateTime.now();
-    // 새벽 4시 이전이면 어제 날짜로 계산
     final dietDate = now.hour < 4 ? now.subtract(const Duration(days: 1)) : now;
     return DateFormat('yyyy-MM-dd').format(dietDate);
   }
 
   // 식단 저장 함수
   Future<void> saveMeal({
-    required String mealType, // '아침', '점심', '저녁', '간식'
+    required String mealType,
     required List<FoodItem> foods,
     DateTime? date,
   }) async {
-
-    // 1. UID 가져오기 (사용자 분리의 핵심)
     String? userId = getUserId();
     if (userId == null) {
       print('❌ 저장 실패: 사용자가 로그인되어 있지 않습니다.');
-      throw Exception('사용자가 로그인되어 있지 않아 데이터를 저장할 수 없습니다.');
+      // 실제 앱에서는 여기서 로그인 화면으로 보내거나 에러 처리를 해야 합니다.
+      return;
     }
 
     try {
@@ -43,7 +40,6 @@ class DatabaseService {
         targetDate = getTodayDate();
       }
 
-      // 영양소 합계 계산
       int totalCal = foods.fold(0, (sum, item) => sum + item.calories);
       int totalCarbs = foods.fold(0, (sum, item) => sum + item.carbs);
       int totalProtein = foods.fold(0, (sum, item) => sum + item.protein);
@@ -51,10 +47,10 @@ class DatabaseService {
 
       List<Map<String, dynamic>> foodMaps = foods.map((f) => f.toMap()).toList();
 
-      // ✅ 경로 수정: UID를 포함하여 사용자별로 데이터 분리
+      // ✅ 저장 경로: users -> uid -> daily_logs -> 날짜 -> meals -> 아침
       await _db
           .collection('users')
-          .doc(userId) // 👈 [수정] 로그인된 사용자의 UID 문서
+          .doc(userId)
           .collection('daily_logs')
           .doc(targetDate)
           .collection('meals')
@@ -79,6 +75,10 @@ class DatabaseService {
 
   // 오늘 날짜의 모든 식단 기록 가져오기
   Future<Map<String, dynamic>> fetchTodayMeals([DateTime? date]) async {
+    // 🟢 1. 불러올 때도 유저 ID가 필요합니다!
+    String? userId = getUserId();
+    if (userId == null) return {}; // 로그인 안 했으면 빈 데이터 반환
+
     String targetDate;
     if (date != null) {
       targetDate = DateFormat('yyyy-MM-dd').format(date);
@@ -89,10 +89,12 @@ class DatabaseService {
     Map<String, dynamic> results = {};
 
     try {
-      // ✅ 경로 수정: UID를 포함하여 사용자별 데이터에서 불러오기
+      // 🟢 2. 경로 수정: 저장한 곳과 똑같은 경로(users -> uid...)를 찾아가야 합니다.
       var snapshot = await _db
+          .collection('users')      // 👈 여기 수정됨
+          .doc(userId)              // 👈 여기 수정됨
           .collection('daily_logs')
-          .doc(targetDate) // 🟢 targetDate 사용
+          .doc(targetDate)
           .collection('meals')
           .get();
 
