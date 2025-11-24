@@ -1,11 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:focus_detector/focus_detector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'edit_food_screen.dart';
 import '../services/gemini_service.dart';
-import '../services/database_service.dart'; // DB 서비스 추가
+import '../services/database_service.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -16,14 +17,9 @@ class CameraScreen extends StatefulWidget {
 
 class _CameraScreenState extends State<CameraScreen> {
   final ImagePicker _picker = ImagePicker();
-
-  // 로딩 상태 변수
   bool _isAnalyzing = false;
-
-  // DB에서 가져온 저장된 식단 데이터 (키: '아침', '점심' 등)
   Map<String, dynamic> _savedMeals = {};
 
-  // 데이터 리스트들
   List<XFile> _breakfastImages = [];
   List<XFile> _lunchImages = [];
   List<XFile> _dinnerImages = [];
@@ -33,7 +29,8 @@ class _CameraScreenState extends State<CameraScreen> {
   List<String> _dinnerTexts = [];
   List<String> _snackTexts = [];
 
-  // 새벽 4시 기준 날짜 계산 (오늘 날짜)
+  late DateTime _selectedDate;
+
   DateTime get _dietDate {
     final now = DateTime.now();
     if (now.hour < 4) {
@@ -42,17 +39,28 @@ class _CameraScreenState extends State<CameraScreen> {
     return now;
   }
 
+  String _key(String baseKey) {
+    String dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+    return "${dateStr}_$baseKey";
+  }
+
+  List<DateTime> get _weekDates {
+    return List.generate(7, (index) {
+      return _dietDate.subtract(Duration(days: 6 - index));
+    });
+  }
+
   @override
   void initState() {
     super.initState();
-    _retrieveLostData(); // 안드로이드 앱 전환 복구
-    _loadTempData();     // 로컬 임시 저장 데이터 복구
-    _fetchFirebaseData(); // Firebase DB 데이터 불러오기
+    _selectedDate = _dietDate;
+    _retrieveLostData();
+    _loadTempData();
+    _fetchFirebaseData();
   }
 
-  // 1. 파이어베이스에서 오늘 기록 불러오기
   Future<void> _fetchFirebaseData() async {
-    final data = await DatabaseService().fetchTodayMeals();
+    final data = await DatabaseService().fetchTodayMeals(_selectedDate);
     if (mounted) {
       setState(() {
         _savedMeals = data;
@@ -60,58 +68,51 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  // 2. 로컬 임시 데이터 불러오기
   Future<void> _loadTempData() async {
     final prefs = await SharedPreferences.getInstance();
-
-    String? savedDate = prefs.getString('temp_date');
-    String todayStr = DateFormat('yyyy-MM-dd').format(_dietDate);
-
-    // 날짜가 다르면(어제 기록이면) 초기화
-    if (savedDate != todayStr) {
-      await prefs.clear();
-      return;
-    }
-
+    // 키 생성 함수(_key)를 사용해서 해당 날짜의 데이터를 가져옴
     setState(() {
-      _breakfastTexts = prefs.getStringList('breakfast_texts') ?? [];
-      _lunchTexts = prefs.getStringList('lunch_texts') ?? [];
-      _dinnerTexts = prefs.getStringList('dinner_texts') ?? [];
-      _snackTexts = prefs.getStringList('snack_texts') ?? [];
+      _breakfastTexts = prefs.getStringList(_key('breakfast_texts')) ?? [];
+      _lunchTexts = prefs.getStringList(_key('lunch_texts')) ?? [];
+      _dinnerTexts = prefs.getStringList(_key('dinner_texts')) ?? [];
+      _snackTexts = prefs.getStringList(_key('snack_texts')) ?? [];
 
-      _breakfastImages = (prefs.getStringList('breakfast_images') ?? []).map((path) => XFile(path)).toList();
-      _lunchImages = (prefs.getStringList('lunch_images') ?? []).map((path) => XFile(path)).toList();
-      _dinnerImages = (prefs.getStringList('dinner_images') ?? []).map((path) => XFile(path)).toList();
-      _snackImages = (prefs.getStringList('snack_images') ?? []).map((path) => XFile(path)).toList();
+      _breakfastImages = (prefs.getStringList(_key('breakfast_images')) ?? [])
+          .map((path) => XFile(path))
+          .toList();
+      _lunchImages = (prefs.getStringList(_key('lunch_images')) ?? [])
+          .map((path) => XFile(path))
+          .toList();
+      _dinnerImages = (prefs.getStringList(_key('dinner_images')) ?? [])
+          .map((path) => XFile(path))
+          .toList();
+      _snackImages = (prefs.getStringList(_key('snack_images')) ?? [])
+          .map((path) => XFile(path))
+          .toList();
     });
   }
 
-  // 3. 로컬 임시 데이터 저장하기
   Future<void> _saveTempData() async {
     final prefs = await SharedPreferences.getInstance();
-    String todayStr = DateFormat('yyyy-MM-dd').format(_dietDate);
 
-    await prefs.setString('temp_date', todayStr);
+    await prefs.setStringList(_key('breakfast_texts'), _breakfastTexts);
+    await prefs.setStringList(_key('lunch_texts'), _lunchTexts);
+    await prefs.setStringList(_key('dinner_texts'), _dinnerTexts);
+    await prefs.setStringList(_key('snack_texts'), _snackTexts);
 
-    await prefs.setStringList('breakfast_texts', _breakfastTexts);
-    await prefs.setStringList('lunch_texts', _lunchTexts);
-    await prefs.setStringList('dinner_texts', _dinnerTexts);
-    await prefs.setStringList('snack_texts', _snackTexts);
-
-    await prefs.setStringList('breakfast_images', _breakfastImages.map((e) => e.path).toList());
-    await prefs.setStringList('lunch_images', _lunchImages.map((e) => e.path).toList());
-    await prefs.setStringList('dinner_images', _dinnerImages.map((e) => e.path).toList());
-    await prefs.setStringList('snack_images', _snackImages.map((e) => e.path).toList());
+    await prefs.setStringList(_key('breakfast_images'), _breakfastImages.map((e) => e.path).toList());
+    await prefs.setStringList(_key('lunch_images'), _lunchImages.map((e) => e.path).toList());
+    await prefs.setStringList(_key('dinner_images'), _dinnerImages.map((e) => e.path).toList());
+    await prefs.setStringList(_key('snack_images'), _snackImages.map((e) => e.path).toList());
   }
 
-  // 안드로이드 프로세스 복구
   Future<void> _retrieveLostData() async {
     final LostDataResponse response = await _picker.retrieveLostData();
     if (response.isEmpty) return;
     final XFile? file = response.file;
     if (file != null) {
       setState(() {
-        _breakfastImages.add(file); // 임시로 아침에 추가
+        _breakfastImages.add(file);
       });
       _saveTempData();
     }
@@ -183,64 +184,6 @@ class _CameraScreenState extends State<CameraScreen> {
     );
   }
 
-  void _showAddOptions(BuildContext context, String mealType) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext context) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('$mealType 추가하기', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, size: 20),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _buildOptionTile(
-                  icon: Icons.camera_alt,
-                  text: '카메라로 촬영',
-                  onTap: () { Navigator.pop(context); _pickImage(mealType, ImageSource.camera); }
-              ),
-              _buildOptionTile(
-                  icon: Icons.photo_library,
-                  text: '이미지 업로드',
-                  onTap: () { Navigator.pop(context); _pickImage(mealType, ImageSource.gallery); }
-              ),
-              _buildOptionTile(
-                  icon: Icons.edit,
-                  text: '텍스트로 입력',
-                  onTap: () { Navigator.pop(context); _showTextInputDialog(mealType); }
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildOptionTile({required IconData icon, required String text, required VoidCallback onTap}) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.grey[700]),
-      title: Text(text),
-      onTap: onTap,
-      contentPadding: EdgeInsets.zero,
-      dense: true,
-    );
-  }
-
   void _removeText(String mealType, String text) {
     setState(() {
       switch (mealType) {
@@ -262,10 +205,9 @@ class _CameraScreenState extends State<CameraScreen> {
         case '간식': _snackImages.remove(image); break;
       }
     });
-    _saveTempData(); // 변경사항 즉시 저장
+    _saveTempData();
   }
 
-  // 🟢 분석 시작 버튼 클릭
   void _onAnalyzePressed(String mealType) async {
     List<XFile> targetImages = [];
     List<String> targetTexts = [];
@@ -292,8 +234,6 @@ class _CameraScreenState extends State<CameraScreen> {
 
       if (foodList != null) {
         if (!mounted) return;
-
-        // 화면 이동 (갔다 오면 DB 다시 조회)
         await Navigator.push(
           context,
           MaterialPageRoute(
@@ -303,7 +243,7 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
         );
-        _fetchFirebaseData(); // 돌아왔을 때 새로고침
+        _fetchFirebaseData();
       } else {
         throw Exception('음식을 식별하지 못했습니다.');
       }
@@ -315,74 +255,195 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  // 🟢 수정하기 버튼 클릭 (요약 카드 지우기)
   void _onModifyPressed(String mealType) {
     setState(() {
       _savedMeals.remove(mealType);
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    String dateDisplay = DateFormat('M월 d일').format(_dietDate);
+  // 🟢 [수정] 날짜 선택 위젯 (반전된 곡선 적용)
+  Widget _buildDateSelector() {
+    return Container(
+      height: 50,
+      color: Colors.grey[200],
+      // 🟢 하단 패딩 제거 (몸통과 밀착)
+      padding: const EdgeInsets.only(left: 10, right: 10, top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end, // 하단 정렬
+        children: _weekDates.map((date) {
+          final isSelected = DateFormat('yyyy-MM-dd').format(date) ==
+              DateFormat('yyyy-MM-dd').format(_selectedDate);
 
-    return Stack(
-      children: [
-        Scaffold(
-          appBar: AppBar(
-            centerTitle: true,
-            toolbarHeight: 80,
-            title: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '$dateDisplay 식단',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
+          // 날짜/요일 내용물
+          Widget tabContent = Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                DateFormat('E', 'en_US').format(date),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isSelected ? Colors.black : Colors.grey[500],
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  '새벽 4시 ~ 익일 새벽 4시 기준',
-                  style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.normal),
+              ),
+              const SizedBox(height: 1),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  DateFormat('d').format(date),
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: isSelected ? FontWeight.w900 : FontWeight.normal,
+                    color: isSelected ? Colors.black : Colors.grey[600],
+                    height: 1.0, // 줄간격 타이트하게
+                  ),
                 ),
-              ],
-            ),
-          ),
-          body: SingleChildScrollView(
-            child: Column(
-              children: [
-                const SizedBox(height: 10),
-                _buildMealSection('아침', _breakfastImages, _breakfastTexts),
-                const Divider(height: 1, thickness: 1),
-                _buildMealSection('점심', _lunchImages, _lunchTexts),
-                const Divider(height: 1, thickness: 1),
-                _buildMealSection('저녁', _dinnerImages, _dinnerTexts),
-                const Divider(height: 1, thickness: 1),
-                _buildMealSection('간식', _snackImages, _snackTexts),
-                const SizedBox(height: 50),
-              ],
-            ),
-          ),
-        ),
+              ),
+            ],
+          );
 
-        if (_isAnalyzing)
-          Container(
-            color: Colors.black.withOpacity(0.5),
-            child: const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+          return Expanded(
+            child: GestureDetector(
+              onTap: () async {
+                setState(() {
+                  _selectedDate = date;
+                  // 2. 화면의 리스트들 일단 비우기 (깜빡임 방지 & 잔상 제거)
+                  _breakfastImages = []; _breakfastTexts = [];
+                  _lunchImages = []; _lunchTexts = [];
+                  _dinnerImages = []; _dinnerTexts = [];
+                  _snackImages = []; _snackTexts = [];
+                  _savedMeals = {}; // DB 데이터도 초기화
+                });
+
+                await _loadTempData();     // 로컬 데이터(작성중인 것) 로드
+                await _fetchFirebaseData(); // DB 데이터(저장된 것) 로드
+
+              },
+              child: isSelected
+                  ? Stack(
+                clipBehavior: Clip.none, // 영역 밖으로 그리기 허용
+                alignment: Alignment.bottomCenter,
                 children: [
-                  CircularProgressIndicator(color: Colors.white),
-                  SizedBox(height: 20),
-                  Text('AI가 음식을 확인하고 있어요...', style: TextStyle(color: Colors.white, fontSize: 16)),
+                  // 🟢 메인 흰색 탭 (위쪽만 둥글게)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+                    ),
+                    alignment: Alignment.center,
+                    child: tabContent,
+                  ),
+                  // 🟢 왼쪽 하단 연결부 (반전 곡선)
+                  const Positioned(
+                    bottom: 0,
+                    left: -10, // 탭 바깥쪽으로 위치
+                    child: _InvertedCorner(color: Colors.white, isLeft: true),
+                  ),
+                  // 🟢 오른쪽 하단 연결부 (반전 곡선)
+                  const Positioned(
+                    bottom: 0,
+                    right: -10, // 탭 바깥쪽으로 위치
+                    child: _InvertedCorner(color: Colors.white, isLeft: false),
+                  ),
                 ],
+              )
+                  : Container(
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                color: Colors.transparent,
+                alignment: Alignment.center,
+                child: tabContent,
               ),
             ),
-          ),
-      ],
+          );
+        }).toList(),
+      ),
     );
   }
 
-  // 🟢 끼니 섹션 빌더 (분기 처리)
+  @override
+  Widget build(BuildContext context) {
+    return FocusDetector(
+      // 🟢 [핵심] 탭을 눌러서 이 화면이 다시 보일 때마다 실행됨
+      onFocusGained: () {
+        _loadTempData();      // 로컬 데이터 다시 불러오기
+        _fetchFirebaseData(); // 파이어베이스 데이터 다시 불러오기
+      },
+      child: Stack(
+        children: [
+          Scaffold(
+            backgroundColor: Colors.grey[200],
+            body: CustomScrollView(
+              slivers: [
+                SliverAppBar(
+                  backgroundColor: Colors.grey[200],
+                  floating: true,
+                  pinned: false,
+                  snap: true,
+                  expandedHeight: 85,
+                  elevation: 0,
+                  flexibleSpace: FlexibleSpaceBar(
+                    background: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            '새벽 4시 ~ 익일 새벽 4시 기준',
+                            style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                          ),
+                        ),
+                        _buildDateSelector(),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(
+                      minHeight: MediaQuery.of(context).size.height - 85,
+                    ),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 20),
+                        _buildMealSection('아침', _breakfastImages, _breakfastTexts),
+                        const Divider(height: 1, thickness: 1),
+                        _buildMealSection('점심', _lunchImages, _lunchTexts),
+                        const Divider(height: 1, thickness: 1),
+                        _buildMealSection('저녁', _dinnerImages, _dinnerTexts),
+                        const Divider(height: 1, thickness: 1),
+                        _buildMealSection('간식', _snackImages, _snackTexts),
+                        const SizedBox(height: 100),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_isAnalyzing)
+            Container(
+              color: Colors.black.withOpacity(0.5),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 20),
+                    Text('AI가 음식을 확인하고 있어요...', style: TextStyle(color: Colors.white, fontSize: 16)),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMealSection(String title, List<XFile> images, List<String> textItems) {
     bool isSaved = _savedMeals.containsKey(title);
     Map<String, dynamic>? savedData = isSaved ? _savedMeals[title] : null;
@@ -401,19 +462,20 @@ class _CameraScreenState extends State<CameraScreen> {
               isSaved
                   ? TextButton.icon(
                 onPressed: () => _onModifyPressed(title),
-                icon: const Icon(Icons.edit, size: 16, color: Colors.grey),
-                label: const Text('수정하기', style: TextStyle(color: Colors.grey)),
+                icon: const Icon(Icons.edit, size: 12, color: Colors.grey),
+                label: const Text('수정', style: TextStyle(color: Colors.grey, fontSize: 12)),
               )
-                  : ExpandableFab(
-                onCameraTap: () => _pickImage(title, ImageSource.camera),
-                onGalleryTap: () => _pickImage(title, ImageSource.gallery),
-                onTextTap: () => _showTextInputDialog(title),
+                  : Flexible(
+                child: ExpandableFab(
+                  onCameraTap: () => _pickImage(title, ImageSource.camera),
+                  onGalleryTap: () => _pickImage(title, ImageSource.gallery),
+                  onTextTap: () => _showTextInputDialog(title),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 10),
 
-          // 저장됨 ? 요약카드 : 입력폼
           if (isSaved && savedData != null)
             _buildSummaryCard(savedData)
           else
@@ -423,7 +485,6 @@ class _CameraScreenState extends State<CameraScreen> {
     );
   }
 
-  // 🟢 요약 카드 UI
   Widget _buildSummaryCard(Map<String, dynamic> data) {
     return Container(
       width: double.infinity,
@@ -473,7 +534,6 @@ class _CameraScreenState extends State<CameraScreen> {
     );
   }
 
-  // 🟢 입력 폼 UI (기존 로직 분리)
   Widget _buildInputForm(String title, List<XFile> images, List<String> textItems) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -517,7 +577,7 @@ class _CameraScreenState extends State<CameraScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(4),
                               decoration: const BoxDecoration(
-                                color: Colors.black54, // 반투명 검은 배경
+                                color: Colors.black54,
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(
@@ -541,7 +601,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 children: textItems.map((text) {
                   return Chip(
                     label: Text(text),
-                    backgroundColor: Color(0x30adff2f),
+                    backgroundColor: Colors.lightBlue[50],
                     side: BorderSide.none,
                     onDeleted: () => _removeText(title, text),
                   );
@@ -571,8 +631,6 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 }
 
-
-// + x 위젯!
 class ExpandableFab extends StatefulWidget {
   final VoidCallback onCameraTap;
   final VoidCallback onGalleryTap;
@@ -602,38 +660,39 @@ class _ExpandableFabState extends State<ExpandableFab> with SingleTickerProvider
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        // 1. 펼쳐지는 아이콘들 (왼쪽에 배치)
         AnimatedSize(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
           child: SizedBox(
-            // 닫혀있으면 너비 0, 열리면 내용물만큼
             width: _isOpen ? null : 0,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildActionBtn(Icons.camera_alt, '카메라', widget.onCameraTap),
-                const SizedBox(width: 8),
-                _buildActionBtn(Icons.photo_library, '갤러리', widget.onGalleryTap),
-                const SizedBox(width: 8),
-                _buildActionBtn(Icons.edit, '텍스트', widget.onTextTap),
-                const SizedBox(width: 12), // + 버튼과의 간격
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildActionBtn(Icons.camera_alt, '카메라', widget.onCameraTap),
+                  const SizedBox(width: 8),
+                  _buildActionBtn(Icons.photo_library, '갤러리', widget.onGalleryTap),
+                  const SizedBox(width: 8),
+                  _buildActionBtn(Icons.edit, '텍스트', widget.onTextTap),
+                  const SizedBox(width: 12),
+                ],
+              ),
             ),
           ),
         ),
 
-        // 2. 메인 토글 버튼 (+ 회전 -> x)
         GestureDetector(
           onTap: _toggle,
           child: AnimatedRotation(
-            turns: _isOpen ? 0.125 : 0, // 0.125바퀴 = 45도 회전 (+가 x가 됨)
+            turns: _isOpen ? 0.125 : 0,
             duration: const Duration(milliseconds: 200),
             child: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _isOpen ? Colors.grey[200] : Colors.blue[50], // 열리면 회색, 닫히면 파란색
+                color: _isOpen ? Colors.grey[200] : Colors.blue[50],
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -648,17 +707,16 @@ class _ExpandableFabState extends State<ExpandableFab> with SingleTickerProvider
     );
   }
 
-  // 작은 액션 버튼 디자인
   Widget _buildActionBtn(IconData icon, String tooltip, VoidCallback onTap) {
     return GestureDetector(
       onTap: () {
-        _toggle(); // 버튼 누르면 메뉴 닫기
-        onTap();   // 기능 실행
+        _toggle();
+        onTap();
       },
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.blue, // 파란색 배경
+          color: Colors.blue,
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))
@@ -668,4 +726,72 @@ class _ExpandableFabState extends State<ExpandableFab> with SingleTickerProvider
       ),
     );
   }
+}
+
+// 🟢 [신규] 반전된 곡선을 그리는 페인터 위젯
+class _InvertedCorner extends StatelessWidget {
+  final Color color;
+  final bool isLeft; // 왼쪽인지 오른쪽인지
+
+  const _InvertedCorner({required this.color, required this.isLeft});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 12,
+      height: 12,
+      child: CustomPaint(
+        painter: _InvertedCornerPainter(color: color, isLeft: isLeft),
+      ),
+    );
+  }
+}
+
+class _InvertedCornerPainter extends CustomPainter {
+  final Color color;
+  final bool isLeft;
+
+  _InvertedCornerPainter({required this.color, required this.isLeft});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+
+    // 🟢 왼쪽 조각 (탭의 왼쪽에 붙음)
+    // -> 오른쪽 아래가 꽉 차고, 왼쪽 위가 오목하게 파인 모양
+    if (isLeft) {
+      path.moveTo(size.width, 0); // 1. 오른쪽 위 (탭과 닿는 점)
+      path.lineTo(size.width, size.height); // 2. 오른쪽 아래
+      path.lineTo(0, size.height); // 3. 왼쪽 아래
+      // 4. 오목한 곡선으로 다시 1번 점으로 돌아감
+      path.arcToPoint(
+        Offset(size.width, 0),
+        radius: Radius.circular(size.width),
+        clockwise: false, // 반시계 방향으로 돌려야 안쪽으로 파입니다.
+      );
+    }
+
+    // 🟢 오른쪽 조각 (탭의 오른쪽에 붙음)
+    // -> 왼쪽 아래가 꽉 차고, 오른쪽 위가 오목하게 파인 모양
+    else {
+      path.moveTo(0, 0); // 1. 왼쪽 위 (탭과 닿는 점)
+      path.lineTo(0, size.height); // 2. 왼쪽 아래
+      path.lineTo(size.width, size.height); // 3. 오른쪽 아래
+      // 4. 오목한 곡선으로 다시 1번 점으로 돌아감
+      path.arcToPoint(
+        Offset(0, 0),
+        radius: Radius.circular(size.width),
+      );
+    }
+
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
