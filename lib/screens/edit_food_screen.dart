@@ -7,11 +7,13 @@ import 'dart:convert';
 class EditFoodScreen extends StatefulWidget {
   final List<Map<String, String>> initialFoods;
   final String mealType;
+  final DateTime selectedDate;
 
   const EditFoodScreen({
     super.key,
     required this.initialFoods,
     required this.mealType,
+    required this.selectedDate,
   });
 
   @override
@@ -102,10 +104,11 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
       await DatabaseService().saveMeal(
         mealType: widget.mealType,
         foods: _analyzedFoods,
+        date: widget.selectedDate,
       );
 
       if (mounted) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
+        Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('식단이 저장되었습니다! 📝')),
         );

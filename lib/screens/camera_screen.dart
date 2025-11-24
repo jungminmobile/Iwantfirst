@@ -234,16 +234,20 @@ class _CameraScreenState extends State<CameraScreen> {
 
       if (foodList != null) {
         if (!mounted) return;
-        await Navigator.push(
+        final result = await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => EditFoodScreen(
               initialFoods: foodList,
               mealType: mealType,
+              selectedDate: _selectedDate,
             ),
           ),
         );
-        _fetchFirebaseData();
+        if (result == true) {
+          _clearInputData(mealType);
+          _fetchFirebaseData();
+        }
       } else {
         throw Exception('음식을 식별하지 못했습니다.');
       }
@@ -359,6 +363,18 @@ class _CameraScreenState extends State<CameraScreen> {
         }).toList(),
       ),
     );
+  }
+
+  void _clearInputData(String mealType) {
+    setState(() {
+      switch (mealType) {
+        case '아침': _breakfastImages.clear(); _breakfastTexts.clear(); break;
+        case '점심': _lunchImages.clear(); _lunchTexts.clear(); break;
+        case '저녁': _dinnerImages.clear(); _dinnerTexts.clear(); break;
+        case '간식': _snackImages.clear(); _snackTexts.clear(); break;
+      }
+    });
+    _saveTempData(); // 비워진 상태를 로컬 저장소에도 반영
   }
 
   @override
