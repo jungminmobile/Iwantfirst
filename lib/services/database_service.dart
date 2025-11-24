@@ -25,7 +25,9 @@ class DatabaseService {
   Future<void> saveMeal({
     required String mealType, // '아침', '점심', '저녁', '간식'
     required List<FoodItem> foods,
+    DateTime? date,
   }) async {
+
     // 1. UID 가져오기 (사용자 분리의 핵심)
     String? userId = getUserId();
     if (userId == null) {
@@ -34,7 +36,12 @@ class DatabaseService {
     }
 
     try {
-      String today = getTodayDate(); // 위에서 만든 함수 호출
+      String targetDate;
+      if (date != null) {
+        targetDate = DateFormat('yyyy-MM-dd').format(date);
+      } else {
+        targetDate = getTodayDate();
+      }
 
       // 영양소 합계 계산
       int totalCal = foods.fold(0, (sum, item) => sum + item.calories);
@@ -49,7 +56,7 @@ class DatabaseService {
           .collection('users')
           .doc(userId) // 👈 [수정] 로그인된 사용자의 UID 문서
           .collection('daily_logs')
-          .doc(today)
+          .doc(targetDate)
           .collection('meals')
           .doc(mealType)
           .set({
@@ -62,7 +69,7 @@ class DatabaseService {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      print('✅ $mealType 식단 저장 완료! (경로: users/$userId/daily_logs/$today/meals/$mealType)');
+      print('✅ $mealType 식단 저장 완료! (경로: users/$userId/daily_logs/$targetDate/meals/$mealType)');
 
     } catch (e) {
       print('❌ 저장 실패: $e');
@@ -71,23 +78,21 @@ class DatabaseService {
   }
 
   // 오늘 날짜의 모든 식단 기록 가져오기
-  Future<Map<String, dynamic>> fetchTodayMeals() async {
-    // 1. UID 가져오기 (사용자 분리의 핵심)
-    String? userId = getUserId();
-    if (userId == null) {
-      return {}; // 로그인 안 했으면 빈 데이터 반환
+  Future<Map<String, dynamic>> fetchTodayMeals([DateTime? date]) async {
+    String targetDate;
+    if (date != null) {
+      targetDate = DateFormat('yyyy-MM-dd').format(date);
+    } else {
+      targetDate = getTodayDate();
     }
 
-    String today = getTodayDate(); // 위에서 만든 함수 호출
     Map<String, dynamic> results = {};
 
     try {
       // ✅ 경로 수정: UID를 포함하여 사용자별 데이터에서 불러오기
       var snapshot = await _db
-          .collection('users')
-          .doc(userId) // 👈 [수정] 로그인된 사용자의 UID 문서
           .collection('daily_logs')
-          .doc(today)
+          .doc(targetDate) // 🟢 targetDate 사용
           .collection('meals')
           .get();
 
