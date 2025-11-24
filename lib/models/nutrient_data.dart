@@ -1,3 +1,5 @@
+// lib/models/nutrient_data.dart
+
 class NutrientData {
   final double currentCalories;
   final double targetCalories;
