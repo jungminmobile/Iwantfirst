@@ -1,82 +1,150 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'edit_profile_screen.dart'; // 방금 만든 화면 임포트
 
-class SettingsScreen extends StatelessWidget {
+// ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+// ★★★ 여기가 핵심 수정 사항입니다: 정확한 파일 경로로 수정 ★★★
+// ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+import 'package:hackton_2025_2/screens/setting/edit_profile_screen.dart';
+import 'package:hackton_2025_2/screens/setting/account_delete_loading_screen.dart';
+
+
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
-  // 로그아웃 함수
-  Future<void> _logout(BuildContext context) async {
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  Future<void> _logout() async {
     try {
       await FirebaseAuth.instance.signOut();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('로그아웃되었습니다.')),
-        );
-      }
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('로그아웃되었습니다.')),
+      );
     } catch (e) {
       print('로그아웃 오류: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('로그아웃에 실패했습니다: $e')),
-        );
-      }
     }
   }
 
-  // 목표 칼로리 수정 다이얼로그 표시 함수
-  void _showTargetCaloriesDialog(BuildContext context) {
-    final caloriesController = TextEditingController();
-    final User? currentUser = FirebaseAuth.instance.currentUser;
+  void _showDeleteAccountDialog() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
 
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('목표 칼로리 수정'),
-          content: TextField(
-            controller: caloriesController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(hintText: '새로운 목표 칼로리 입력'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('취소'),
-            ),
-            TextButton(
-              onPressed: () async {
-                if (caloriesController.text.isNotEmpty && currentUser != null) {
-                  final newCalories = int.tryParse(caloriesController.text);
-                  if (newCalories != null) {
-                    try {
-                      // 점 표기법을 사용하여 'goals.target_calories'를 업데이트합니다.
-                      await FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(currentUser.uid)
-                          .update({'goals.target_calories': newCalories});
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
 
-                      Navigator.of(context).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('목표 칼로리가 변경되었습니다.')),
-                      );
-                    } catch (e) {
-                      print("목표 칼로리 업데이트 오류: $e");
-                    }
-                  }
-                }
-              },
-              child: const Text('저장'),
+    String? userNickname;
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
+
+      if (userDoc.exists) {
+        final data = userDoc.data();
+        if (data != null && data.containsKey('profile') && data['profile'] is Map && data['profile'].containsKey('name')) {
+          userNickname = data['profile']['name'];
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('사용자 정보 로딩 실패: $e')));
+      }
+      return;
+    }
+
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+
+    if (userNickname == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('닉네임 정보를 찾을 수 없어 탈퇴를 진행할 수 없습니다.')),
+      );
+      return;
+    }
+
+    final nicknameController = TextEditingController();
+    // 1. 닉네임 입력 팝업
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('회원 탈퇴 인증'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('계정을 영구적으로 삭제하려면, 아래에 본인의 닉네임을 정확하게 입력해주세요.'),
+            const SizedBox(height: 12),
+            Text('닉네임: $userNickname', style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: nicknameController,
+              decoration: const InputDecoration(
+                hintText: '닉네임을 입력하세요',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
             ),
           ],
-        );
-      },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () {
+              // 2. 닉네임 일치 확인
+              if (nicknameController.text == userNickname) {
+                Navigator.of(dialogContext).pop();
+                // 3. 최종 확인 팝업
+                showDialog(
+                  context: context,
+                  builder: (confirmContext) => AlertDialog(
+                    title: const Text('정말 탈퇴하시겠습니까?'),
+                    content: const Text('모든 데이터가 영구적으로 삭제되며, 이 작업은 되돌릴 수 없습니다.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(confirmContext).pop(),
+                        child: const Text('취소'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(confirmContext).pop();
+                          Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => const AccountDeleteLoadingScreen(),
+                          ));
+                        },
+                        child: Text('탈퇴 진행', style: TextStyle(color: Colors.red[700])),
+                      ),
+                    ],
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('닉네임이 일치하지 않습니다. 다시 확인해주세요.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: Text('확인', style: TextStyle(color: Colors.blue[700])),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    // UI 부분은 변경 없습니다.
     return Scaffold(
       appBar: AppBar(
         title: const Text('설정'),
@@ -86,33 +154,19 @@ class SettingsScreen extends StatelessWidget {
       ),
       body: ListView(
         children: [
-          // 1. 회원정보 수정
           ListTile(
             leading: const Icon(Icons.person_outline),
-            title: const Text('회원정보 수정'),
+            title: const Text('프로필 및 목표 설정'),
+            subtitle: const Text('이름, 키, 성별, 목표 칼로리를 수정합니다.'),
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
             onTap: () {
-              // 회원정보 수정 화면으로 이동
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const EditProfileScreen()),
               );
             },
           ),
-
-          // 2. 목표 칼로리 수정
-          ListTile(
-            leading: const Icon(Icons.track_changes_outlined),
-            title: const Text('목표 칼로리 수정'),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              // 목표 칼로리 수정 다이얼로그 호출
-              _showTargetCaloriesDialog(context);
-            },
-          ),
           const Divider(),
-
-          // 3. 로그아웃
           ListTile(
             leading: const Icon(Icons.logout),
             title: const Text('로그아웃'),
@@ -132,7 +186,7 @@ class SettingsScreen extends StatelessWidget {
                         child: const Text('확인'),
                         onPressed: () {
                           Navigator.of(dialogContext).pop();
-                          _logout(context); // 로그아웃 함수 호출
+                          _logout();
                         },
                       ),
                     ],
@@ -141,15 +195,10 @@ class SettingsScreen extends StatelessWidget {
               );
             },
           ),
-
-          // 4. 회원 탈퇴
           ListTile(
             leading: Icon(Icons.person_remove_outlined, color: Colors.red[700]),
             title: Text('회원 탈퇴', style: TextStyle(color: Colors.red[700])),
-            onTap: () {
-              // TODO: 회원 탈퇴 기능 구현
-              print('회원 탈퇴 눌림');
-            },
+            onTap: _showDeleteAccountDialog,
           ),
         ],
       ),
