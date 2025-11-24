@@ -391,6 +391,7 @@ class _StatsScreenState extends State<StatsScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: TableCalendar(
+        availableGestures: AvailableGestures.horizontalSwipe,
         locale: 'ko_KR',
         firstDay: DateTime.utc(2024, 1, 1),
         lastDay: DateTime.utc(2030, 12, 31),
