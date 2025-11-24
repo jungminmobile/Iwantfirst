@@ -4,7 +4,7 @@ import 'camera_screen.dart';
 import 'stats_screen.dart';
 import 'login/login_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:hackton_2025_2/screens/settings_screen.dart';
+import 'package:hackton_2025_2/screens/setting/settings_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
