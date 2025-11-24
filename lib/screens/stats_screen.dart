@@ -17,57 +17,50 @@ class _StatsScreenState extends State<StatsScreen> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
 
-  // 📊 그래프 모드 (0: 칼로리, 1: 탄단지)
-  int _chartIndex = 0;
+  // 📊 그래프 필터 상태 (처음엔 모두 true)
+  Map<String, bool> _chartVisibility = {
+    'cal': true,
+    'carbs': true,
+    'protein': true,
+    'fat': true,
+  };
+
+  // 🎯 [중요] 목표 섭취량 (나중에 DB에서 불러오거나 설정값으로 대체하세요)
+  final double _goalCal = 2500.0;
+  final double _goalCarbs = 300.0;
+  final double _goalProtein = 100.0;
+  final double _goalFat = 60.0;
 
   // ⏳ 로딩 상태
   bool _isLoading = true;
 
   // 💾 날짜별 합계 데이터 저장소
-  // 구조: {'2024-05-24': {'cal': 2100, 'carbs': 300, ...}}
   final Map<String, Map<String, double>> _dailyStats = {};
 
   @override
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
-    _fetchMonthlyData(); // 화면 켜지면 데이터 불러오기
+    _fetchMonthlyData();
   }
 
-  // 🔥 파이어베이스에서 데이터 가져오기
-
+  // 🔥 파이어베이스 데이터 가져오기 (기존 로직 유지)
   Future<void> _fetchMonthlyData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    print("🔍 데이터 탐색 시작 (collectionGroup 방식)");
-
     try {
-      // 1. 'meals'라는 이름을 가진 모든 컬렉션을 찾습니다. (경로 무시하고 전체 검색)
-      final snapshot = await FirebaseFirestore.instance
-          .collectionGroup('meals')
-          .get();
-
-      print("📦 전체 meals 문서 발견: ${snapshot.docs.length}개");
+      final snapshot = await FirebaseFirestore.instance.collectionGroup('meals').get();
 
       Map<String, Map<String, double>> tempStats = {};
 
       for (var doc in snapshot.docs) {
-        // 2. [중요] 내 데이터인지 확인 (문서 경로에 내 UID가 포함되어 있는지 체크)
-        // 경로 예시: users/내UID/daily_logs/2025-11-24/meals/아침
-        if (!doc.reference.path.contains(user.uid)) {
-          continue; // 내 꺼 아니면 건너뜀
-        }
+        if (!doc.reference.path.contains(user.uid)) continue;
 
-        // 3. 경로에서 '날짜' 추출 (meals 컬렉션의 부모 문서 ID가 곧 날짜)
-        // doc.reference.parent => 'meals' 컬렉션
-        // doc.reference.parent.parent => '2025-11-24' 문서 (유령 문서라도 ID는 가져올 수 있음)
         final grandParent = doc.reference.parent.parent;
         if (grandParent == null) continue;
+        String dateStr = grandParent.id;
 
-        String dateStr = grandParent.id; // "2025-11-24"
-
-        // 4. 데이터 합산 로직 (기존과 동일)
         var data = doc.data();
         double totalCal = 0;
         double totalCarbs = 0;
@@ -90,7 +83,6 @@ class _StatsScreenState extends State<StatsScreen> {
           }
         }
 
-        // 5. 날짜별로 누적
         if (tempStats.containsKey(dateStr)) {
           tempStats[dateStr]!['cal'] = tempStats[dateStr]!['cal']! + totalCal;
           tempStats[dateStr]!['carbs'] = tempStats[dateStr]!['carbs']! + totalCarbs;
@@ -106,8 +98,6 @@ class _StatsScreenState extends State<StatsScreen> {
         }
       }
 
-      print("✅ 최종 집계 완료: ${tempStats.keys}");
-
       if (mounted) {
         setState(() {
           _dailyStats.clear();
@@ -115,14 +105,12 @@ class _StatsScreenState extends State<StatsScreen> {
           _isLoading = false;
         });
       }
-
     } catch (e) {
       print('❌ 에러 발생: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // 날짜 포맷 헬퍼
   static String _formatDate(DateTime date) {
     return DateFormat('yyyy-MM-dd').format(date);
   }
@@ -136,7 +124,7 @@ class _StatsScreenState extends State<StatsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _fetchMonthlyData, // 새로고침
+            onPressed: _fetchMonthlyData,
           )
         ],
       ),
@@ -146,22 +134,13 @@ class _StatsScreenState extends State<StatsScreen> {
         child: Column(
           children: [
             const SizedBox(height: 20),
-
-            // 1. 상단 그래프 영역
             _buildChartSection(),
-
             const SizedBox(height: 20),
             const Divider(thickness: 8, color: Color(0xFFF5F5F5)),
             const SizedBox(height: 10),
-
-            // 2. 캘린더 영역
             _buildCalendarSection(),
-
             const SizedBox(height: 20),
-
-            // 3. 선택한 날짜 상세 정보
             _buildSelectedDayStats(),
-
             const SizedBox(height: 40),
           ],
         ),
@@ -169,32 +148,34 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  // --- 위젯 구현 ---
-
+  // --- 📊 그래프 섹션 수정됨 ---
   Widget _buildChartSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          const Text('최근 7일 달성률 (%)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 15),
+
+          // 1. 4개의 필터 버튼 (Row + Wrap)
+          Wrap(
+            spacing: 8.0,
             children: [
-              const Text('최근 7일 추세', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              Row(
-                children: [
-                  _buildChartTab('칼로리', 0),
-                  const SizedBox(width: 8),
-                  _buildChartTab('탄단지', 1),
-                ],
-              ),
+              _buildFilterButton('칼로리', 'cal', Colors.redAccent),
+              _buildFilterButton('탄수화물', 'carbs', Colors.green),
+              _buildFilterButton('단백질', 'protein', Colors.blue),
+              _buildFilterButton('지방', 'fat', Colors.orange),
             ],
           ),
+
           const SizedBox(height: 20),
+
+          // 2. 꺾은선 그래프
           SizedBox(
             height: 250,
             child: LineChart(
-              _chartIndex == 0 ? _mainDataCalories() : _mainDataMacros(),
+              _buildLineChartData(), // 통합된 차트 데이터 생성 함수
             ),
           ),
         ],
@@ -202,33 +183,215 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  Widget _buildChartTab(String text, int index) {
-    bool isSelected = _chartIndex == index;
+  // 필터 버튼 위젯 (토글 방식)
+  Widget _buildFilterButton(String label, String key, Color color) {
+    bool isActive = _chartVisibility[key]!;
     return GestureDetector(
-      onTap: () => setState(() => _chartIndex = index),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.blue : Colors.grey[200],
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          text,
+      onTap: () {
+        setState(() {
+          _chartVisibility[key] = !isActive; // 토글
+        });
+      },
+      child: Chip(
+        label: Text(
+          label,
           style: TextStyle(
-            color: isSelected ? Colors.white : Colors.black,
+            color: isActive ? Colors.white : Colors.black54,
             fontWeight: FontWeight.bold,
             fontSize: 12,
           ),
         ),
+        backgroundColor: isActive ? color : Colors.grey[200],
+        side: BorderSide.none,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
       ),
     );
   }
+
+  // --- 📈 통합 그래프 데이터 생성 (백분율 + 툴팁) ---
+  LineChartData _buildLineChartData() {
+    return LineChartData(
+      // 1. 그리드 설정
+      gridData: FlGridData(
+        show: true,
+        drawVerticalLine: false,
+        horizontalInterval: 50, // 50% 단위로 줄 긋기
+      ),
+
+      // 2. 툴팁 설정 (터치 시 퍼센트 + 실제값 표시)
+      lineTouchData: LineTouchData(
+        touchTooltipData: LineTouchTooltipData(
+          fitInsideHorizontally: true,
+          fitInsideVertically: true,
+          // tooltipBgColor: Colors.blueGrey.withOpacity(0.8), // 구버전
+          getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
+            return touchedBarSpots.map((barSpot) {
+              // 인덱스로 날짜 찾기 (역순 계산 필요 없음, spots 생성시 처리)
+              int dayIndex = 6 - barSpot.x.toInt();
+              DateTime date = DateTime.now().subtract(Duration(days: dayIndex));
+              String dateKey = _formatDate(date);
+
+              // 어떤 데이터인지 색깔로 판별하거나 barIndex로 판별
+              // barSpot.barIndex를 사용해 어떤 영양소인지 찾을 수도 있지만,
+              // 여기서는 간단히 현재 spot의 값을 역산하거나 다시 가져옴.
+
+              String label = '';
+              double realValue = 0;
+              String unit = '';
+
+              // *주의: 보여지는 순서에 따라 매칭해야 함. (복잡하므로 색상으로 매칭 권장)
+              // 여기서는 편의상 값을 다시 조회
+              var dailyData = _dailyStats[dateKey];
+              Color color = barSpot.bar.color ?? Colors.black;
+
+              if (color == Colors.redAccent) {
+                label = '칼로리';
+                realValue = dailyData?['cal'] ?? 0;
+                unit = 'kcal';
+              } else if (color == Colors.green) {
+                label = '탄수화물';
+                realValue = dailyData?['carbs'] ?? 0;
+                unit = 'g';
+              } else if (color == Colors.blue) {
+                label = '단백질';
+                realValue = dailyData?['protein'] ?? 0;
+                unit = 'g';
+              } else if (color == Colors.orange) {
+                label = '지방';
+                realValue = dailyData?['fat'] ?? 0;
+                unit = 'g';
+              }
+
+              return LineTooltipItem(
+                '$label\n${barSpot.y.toInt()}% (${realValue.toInt()}$unit)',
+                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              );
+            }).toList();
+          },
+        ),
+      ),
+
+      titlesData: _buildTitles(), // 축 타이틀
+      borderData: FlBorderData(show: false),
+
+      // 3. 목표 라인 (100% 점선)
+      extraLinesData: ExtraLinesData(
+        horizontalLines: [
+          HorizontalLine(
+            y: 100,
+            color: Colors.black54,
+            strokeWidth: 1,
+            dashArray: [5, 5], // 점선 패턴
+            label: HorizontalLineLabel(
+              show: true,
+              alignment: Alignment.topRight,
+              padding: const EdgeInsets.only(right: 5, bottom: 5),
+              style: const TextStyle(color: Colors.black54, fontSize: 10, fontWeight: FontWeight.bold),
+              labelResolver: (line) => 'Goal 100%',
+            ),
+          ),
+        ],
+      ),
+
+      // 4. 실제 라인 데이터들
+      lineBarsData: [
+        if (_chartVisibility['cal']!) _buildLine(Colors.redAccent, 'cal', _goalCal),
+        if (_chartVisibility['carbs']!) _buildLine(Colors.green, 'carbs', _goalCarbs),
+        if (_chartVisibility['protein']!) _buildLine(Colors.blue, 'protein', _goalProtein),
+        if (_chartVisibility['fat']!) _buildLine(Colors.orange, 'fat', _goalFat),
+      ],
+
+      // y축 범위 설정 (최소 0, 최대는 데이터에 따라 유동적이지만 최소 120%까지 확보)
+      minY: 0,
+      maxY: _calcMaxY(),
+    );
+  }
+
+  double _calcMaxY() {
+    // 데이터 중 가장 높은 퍼센트를 찾아서 y축 높이 조절
+    double maxP = 120; // 기본 120%
+    // (복잡하면 그냥 null로 두면 자동조절됨, 여기선 150으로 고정 추천)
+    return 160;
+  }
+
+  // 라인 하나 생성하는 함수
+  LineChartBarData _buildLine(Color color, String key, double goal) {
+    return LineChartBarData(
+      spots: _getPercentageSpots(key, goal),
+      isCurved: false, // 직선
+      color: color,
+      barWidth: 3,
+      isStrokeCapRound: true,
+      dotData: FlDotData(show: true, getDotPainter: (spot, percent, barData, index) {
+        return FlDotCirclePainter(
+          radius: 3,
+          color: Colors.white,
+          strokeWidth: 2,
+          strokeColor: color,
+        );
+      }),
+    );
+  }
+
+  // 절대값 -> 퍼센트 변환 로직
+  List<FlSpot> _getPercentageSpots(String key, double goal) {
+    List<FlSpot> spots = [];
+    for (int i = 6; i >= 0; i--) {
+      DateTime date = DateTime.now().subtract(Duration(days: i));
+      String dateKey = _formatDate(date);
+      double value = _dailyStats[dateKey]?[key] ?? 0;
+
+      // 퍼센트 계산 (value / goal * 100)
+      double percentage = (goal == 0) ? 0 : (value / goal * 100);
+
+      spots.add(FlSpot((6 - i).toDouble(), percentage));
+    }
+    return spots;
+  }
+
+  FlTitlesData _buildTitles() {
+    return FlTitlesData(
+      bottomTitles: AxisTitles(
+        sideTitles: SideTitles(
+          showTitles: true,
+          reservedSize: 30,
+          interval: 1,
+          getTitlesWidget: (value, meta) {
+            final date = DateTime.now().subtract(Duration(days: 6 - value.toInt()));
+            return Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text(
+                DateFormat('M/d').format(date),
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            );
+          },
+        ),
+      ),
+      leftTitles: AxisTitles(
+        sideTitles: SideTitles(
+          showTitles: true,
+          reservedSize: 40,
+          interval: 50, // 50, 100, 150 ...
+          getTitlesWidget: (value, meta) {
+            if (value == 0) return const SizedBox.shrink();
+            return Text('${value.toInt()}%', style: const TextStyle(color: Colors.grey, fontSize: 10));
+          },
+        ),
+      ),
+      topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+      rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+    );
+  }
+
+  // --- 나머지 위젯들 (캘린더 등) ---
 
   Widget _buildCalendarSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: TableCalendar(
-        locale: 'ko_KR', // main.dart에서 초기화 필요 (없으면 en_US로 나옴)
+        locale: 'ko_KR',
         firstDay: DateTime.utc(2024, 1, 1),
         lastDay: DateTime.utc(2030, 12, 31),
         focusedDay: _focusedDay,
@@ -248,7 +411,6 @@ class _StatsScreenState extends State<StatsScreen> {
           formatButtonVisible: false,
           titleCentered: true,
         ),
-        // 데이터가 있는 날짜에 작은 점 찍기
         eventLoader: (day) {
           String key = _formatDate(day);
           return _dailyStats.containsKey(key) ? ['data'] : [];
@@ -259,7 +421,7 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _buildSelectedDayStats() {
     String dateKey = _formatDate(_selectedDay ?? DateTime.now());
-    var data = _dailyStats[dateKey]; // 해당 날짜의 데이터 가져오기
+    var data = _dailyStats[dateKey];
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -328,77 +490,5 @@ class _StatsScreenState extends State<StatsScreen> {
         Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
       ],
     );
-  }
-
-  // --- 그래프 데이터 설정 ---
-
-  LineChartData _mainDataCalories() {
-    return LineChartData(
-      gridData: FlGridData(show: true, drawVerticalLine: false),
-      titlesData: _buildTitles(),
-      borderData: FlBorderData(show: false),
-      lineBarsData: [
-        LineChartBarData(
-          spots: _getSpots('cal'),
-          isCurved: false,
-          color: Colors.redAccent,
-          barWidth: 3,
-          isStrokeCapRound: true,
-          dotData: FlDotData(show: true),
-          belowBarData: BarAreaData(show: true, color: Colors.redAccent.withOpacity(0.1)),
-        ),
-      ],
-    );
-  }
-
-  LineChartData _mainDataMacros() {
-    return LineChartData(
-      gridData: FlGridData(show: true, drawVerticalLine: false),
-      titlesData: _buildTitles(),
-      borderData: FlBorderData(show: false),
-      lineBarsData: [
-        LineChartBarData(spots: _getSpots('carbs'), isCurved: false, color: Colors.green, barWidth: 3),
-        LineChartBarData(spots: _getSpots('protein'), isCurved: false, color: Colors.blue, barWidth: 3),
-        LineChartBarData(spots: _getSpots('fat'), isCurved: false, color: Colors.orange, barWidth: 3),
-      ],
-    );
-  }
-
-  FlTitlesData _buildTitles() {
-    return FlTitlesData(
-      bottomTitles: AxisTitles(
-        sideTitles: SideTitles(
-          showTitles: true,
-          reservedSize: 30,
-          interval: 1,
-          getTitlesWidget: (value, meta) {
-            // 최근 7일 날짜 라벨
-            final date = DateTime.now().subtract(Duration(days: 6 - value.toInt()));
-            return Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: Text(
-                DateFormat('M/d').format(date),
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-            );
-          },
-        ),
-      ),
-      leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-      topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-      rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-    );
-  }
-
-  // 그래프용 좌표 데이터 변환 (최근 7일)
-  List<FlSpot> _getSpots(String key) {
-    List<FlSpot> spots = [];
-    for (int i = 6; i >= 0; i--) {
-      DateTime date = DateTime.now().subtract(Duration(days: i));
-      String dateKey = _formatDate(date);
-      double value = _dailyStats[dateKey]?[key] ?? 0;
-      spots.add(FlSpot((6 - i).toDouble(), value));
-    }
-    return spots;
   }
 }
