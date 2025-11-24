@@ -7,9 +7,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'screens/home_screen.dart'; //홈페이지
 import 'screens/login/login_page.dart'; //로그인 페이지
 import 'screens/main_screen.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // 플러터 엔진 초기화
+
+  await initializeDateFormatting();
 
   // Firebase 초기화
   await Firebase.initializeApp(
