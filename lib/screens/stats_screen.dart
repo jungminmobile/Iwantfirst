@@ -35,6 +35,9 @@ class _StatsScreenState extends State<StatsScreen> {
   bool _isLoading = true;
   final Map<String, Map<String, double>> _dailyStats = {};
 
+  // ★ 1. 차트에 표시될 실제 날짜와 x축 인덱스를 매핑하기 위한 변수 추가
+  final List<DateTime> _chartDates = [];
+
   @override
   void initState() {
     super.initState();
@@ -42,7 +45,7 @@ class _StatsScreenState extends State<StatsScreen> {
     _fetchMonthlyData();
   }
 
-  // 🔥 파이어베이스 데이터 가져오기 (수정된 버전)
+  // 데이터 가져오기 로직은 기존과 동일
   Future<void> _fetchMonthlyData() async {
     if (!_isLoading) setState(() => _isLoading = true);
 
@@ -53,18 +56,15 @@ class _StatsScreenState extends State<StatsScreen> {
     }
 
     try {
-      // 1. 사용자의 '목표(Goals)' 먼저 가져오기
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (userDoc.exists && userDoc.data()!.containsKey('goals')) {
         final goals = userDoc.data()!['goals'] as Map<String, dynamic>;
-
         _goalCal = (goals['target_calories'] as num?)?.toDouble() ?? _goalCal;
         _goalCarbs = (goals['target_carbs'] as num?)?.toDouble() ?? _goalCarbs;
         _goalProtein = (goals['target_protein'] as num?)?.toDouble() ?? _goalProtein;
         _goalFat = (goals['target_fat'] as num?)?.toDouble() ?? _goalFat;
       }
 
-      // 2. 식단 데이터 가져오기 (기존 로직과 동일)
       final snapshot = await FirebaseFirestore.instance.collectionGroup('meals').where(
           FieldPath.documentId,
           isGreaterThanOrEqualTo: FirebaseFirestore.instance.collection('users').doc(user.uid).path
@@ -191,15 +191,22 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   LineChartData _buildLineChartData() {
+    // build 함수가 호출될 때마다 _chartDates 리스트를 초기화합니다.
+    // 이는 필터 버튼(칼로리, 탄수화물 등)을 누를 때마다 차트가 다시 그려지므로 항상 최신 상태를 유지하게 합니다.
+    _chartDates.clear();
+
     return LineChartData(
       gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 50),
       lineTouchData: LineTouchData(
         touchTooltipData: LineTouchTooltipData(
           fitInsideHorizontally: true,
           fitInsideVertically: true,
+          // ★ 3. 툴팁도 재구성된 x축 인덱스를 기준으로 실제 날짜를 찾도록 수정
           getTooltipItems: (spots) => spots.map((spot) {
-            final dayIndex = 6 - spot.x.toInt();
-            final date = DateTime.now().subtract(Duration(days: dayIndex));
+            final int index = spot.x.toInt();
+            if (index < 0 || index >= _chartDates.length) return null;
+
+            final date = _chartDates[index];
             final dateKey = _formatDate(date);
             final dailyData = _dailyStats[dateKey];
             final color = spot.bar.color ?? Colors.black;
@@ -218,10 +225,10 @@ class _StatsScreenState extends State<StatsScreen> {
             }
 
             return LineTooltipItem(
-              '$label\n${spot.y.toInt()}% (${realValue.toInt()}$unit)',
-              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              '${DateFormat('M/d').format(date)}\n$label: ${spot.y.toInt()}% (${realValue.toInt()}$unit)',
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
             );
-          }).toList(),
+          }).whereType<LineTooltipItem>().toList(),
         ),
       ),
       titlesData: _buildTitles(),
@@ -261,27 +268,60 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  // ★★★ 여기가 수정된 부분입니다 ★★★
+  // ★ 2. _getPercentageSpots 함수 수정: '기록이 아예 없는 날'만 제외하는 로직
   List<FlSpot> _getPercentageSpots(String key, double goal) {
-    return List.generate(7, (i) {
+    List<FlSpot> spots = [];
+
+    // 이 함수가 처음 호출될 때(칼로리 계산 시) x축에 해당하는 날짜를 채운다.
+    // _chartDates가 비어있을 때만 채워서, 다른 영양소(탄,단,지) 차트를 그릴 때 x축이 공유되도록 한다.
+    bool shouldFillChartDates = _chartDates.isEmpty;
+
+    // 최근 7일 데이터 순회
+    for (int i = 0; i < 7; i++) {
       final date = DateTime.now().subtract(Duration(days: 6 - i));
       final dateKey = _formatDate(date);
-      final value = _dailyStats[dateKey]?[key] ?? 0;
-      // .toDouble()을 호출하여 타입을 명시적으로 double로 만듭니다.
-      final double percentage = ((goal == 0) ? 0 : (value / goal * 100)).toDouble();
-      return FlSpot(i.toDouble(), percentage);
-    });
+
+      // ★★★★★ 핵심 로직 ★★★★★
+      // '기록이 아예 없는 날'은 건너뛴다.
+      if (!_dailyStats.containsKey(dateKey)) {
+        continue;
+      }
+
+      // '기록은 있지만 특정 영양소 값이 0인 경우'는 포함한다.
+      // _dailyStats[dateKey]는 null이 아님이 보장됨.
+      final value = _dailyStats[dateKey]![key] ?? 0;
+      final double percentage = (goal == 0) ? 0 : (value / goal * 100);
+
+      // 새로운 x축 인덱스(spots.length)와 실제 날짜를 저장
+      spots.add(FlSpot(spots.length.toDouble(), percentage));
+
+      if (shouldFillChartDates) {
+        _chartDates.add(date);
+      }
+    }
+    return spots;
   }
 
   FlTitlesData _buildTitles() {
     return FlTitlesData(
+      // ★ 3. 하단 날짜 레이블도 재구성된 x축 인덱스를 기준으로 실제 날짜를 찾도록 수정
       bottomTitles: AxisTitles(
-        sideTitles: SideTitles(showTitles: true, reservedSize: 30, interval: 1,
+        sideTitles: SideTitles(
+          showTitles: true,
+          reservedSize: 30,
+          interval: 1,
           getTitlesWidget: (value, meta) {
-            final date = DateTime.now().subtract(Duration(days: 6 - value.toInt()));
+            final int index = value.toInt();
+            if (index < 0 || index >= _chartDates.length) {
+              return const SizedBox.shrink();
+            }
+            final date = _chartDates[index];
             return Padding(
               padding: const EdgeInsets.only(top: 8.0),
-              child: Text(DateFormat('M/d').format(date), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              child: Text(
+                DateFormat('M/d').format(date),
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
             );
           },
         ),
