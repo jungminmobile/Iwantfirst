@@ -13,6 +13,9 @@ class StatsScreen extends StatefulWidget {
 }
 
 class _StatsScreenState extends State<StatsScreen> {
+  // ★ 1. 스크롤 컨트롤러 선언 (Listener와 함께 사용)
+  late final ScrollController _scrollController;
+
   // 캘린더 설정
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
@@ -35,14 +38,23 @@ class _StatsScreenState extends State<StatsScreen> {
   bool _isLoading = true;
   final Map<String, Map<String, double>> _dailyStats = {};
 
-  // ★ 1. 차트에 표시될 실제 날짜와 x축 인덱스를 매핑하기 위한 변수 추가
+  // 차트에 표시될 실제 날짜와 x축 인덱스를 매핑하기 위한 변수
   final List<DateTime> _chartDates = [];
 
   @override
   void initState() {
     super.initState();
+    // ★ 2. 스크롤 컨트롤러 초기화
+    _scrollController = ScrollController();
     _selectedDay = _focusedDay;
     _fetchMonthlyData();
+  }
+
+  @override
+  void dispose() {
+    // ★ 3. 스크롤 컨트롤러 해제
+    _scrollController.dispose();
+    super.dispose();
   }
 
   // 데이터 가져오기 로직은 기존과 동일
@@ -114,6 +126,7 @@ class _StatsScreenState extends State<StatsScreen> {
     }
   }
 
+
   static String _formatDate(DateTime date) => DateFormat('yyyy-MM-dd').format(date);
 
   @override
@@ -128,7 +141,9 @@ class _StatsScreenState extends State<StatsScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
+      // ★ 4. SingleChildScrollView에 컨트롤러 연결
           : SingleChildScrollView(
+        controller: _scrollController,
         child: Column(
           children: [
             const SizedBox(height: 20),
@@ -191,8 +206,6 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   LineChartData _buildLineChartData() {
-    // build 함수가 호출될 때마다 _chartDates 리스트를 초기화합니다.
-    // 이는 필터 버튼(칼로리, 탄수화물 등)을 누를 때마다 차트가 다시 그려지므로 항상 최신 상태를 유지하게 합니다.
     _chartDates.clear();
 
     return LineChartData(
@@ -201,7 +214,6 @@ class _StatsScreenState extends State<StatsScreen> {
         touchTooltipData: LineTouchTooltipData(
           fitInsideHorizontally: true,
           fitInsideVertically: true,
-          // ★ 3. 툴팁도 재구성된 x축 인덱스를 기준으로 실제 날짜를 찾도록 수정
           getTooltipItems: (spots) => spots.map((spot) {
             final int index = spot.x.toInt();
             if (index < 0 || index >= _chartDates.length) return null;
@@ -268,31 +280,20 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  // ★ 2. _getPercentageSpots 함수 수정: '기록이 아예 없는 날'만 제외하는 로직
   List<FlSpot> _getPercentageSpots(String key, double goal) {
     List<FlSpot> spots = [];
-
-    // 이 함수가 처음 호출될 때(칼로리 계산 시) x축에 해당하는 날짜를 채운다.
-    // _chartDates가 비어있을 때만 채워서, 다른 영양소(탄,단,지) 차트를 그릴 때 x축이 공유되도록 한다.
     bool shouldFillChartDates = _chartDates.isEmpty;
 
-    // 최근 7일 데이터 순회
     for (int i = 0; i < 7; i++) {
       final date = DateTime.now().subtract(Duration(days: 6 - i));
       final dateKey = _formatDate(date);
 
-      // ★★★★★ 핵심 로직 ★★★★★
-      // '기록이 아예 없는 날'은 건너뛴다.
       if (!_dailyStats.containsKey(dateKey)) {
         continue;
       }
 
-      // '기록은 있지만 특정 영양소 값이 0인 경우'는 포함한다.
-      // _dailyStats[dateKey]는 null이 아님이 보장됨.
       final value = _dailyStats[dateKey]![key] ?? 0;
       final double percentage = (goal == 0) ? 0 : (value / goal * 100);
-
-      // 새로운 x축 인덱스(spots.length)와 실제 날짜를 저장
       spots.add(FlSpot(spots.length.toDouble(), percentage));
 
       if (shouldFillChartDates) {
@@ -304,7 +305,6 @@ class _StatsScreenState extends State<StatsScreen> {
 
   FlTitlesData _buildTitles() {
     return FlTitlesData(
-      // ★ 3. 하단 날짜 레이블도 재구성된 x축 인덱스를 기준으로 실제 날짜를 찾도록 수정
       bottomTitles: AxisTitles(
         sideTitles: SideTitles(
           showTitles: true,
@@ -339,25 +339,36 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  // ★ 5. TableCalendar를 Listener 위젯으로 감싸는 최종 수정
   Widget _buildCalendarSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: TableCalendar(
-        locale: 'ko_KR',
-        firstDay: DateTime.utc(2024, 1, 1),
-        lastDay: DateTime.utc(2030, 12, 31),
-        focusedDay: _focusedDay,
-        selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-        onDaySelected: (selectedDay, focusedDay) => setState(() {
-          _selectedDay = selectedDay; _focusedDay = focusedDay;
-        }),
-        calendarStyle: const CalendarStyle(
-          todayDecoration: BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
-          selectedDecoration: BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
-          markerDecoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+      // 가장 원시적인 포인터 이벤트를 감지하는 Listener 위젯 사용
+      child: Listener(
+        // 손가락이 화면 위에서 움직일 때마다 호출됨
+        onPointerMove: (PointerMoveEvent event) {
+          // 수직(Y) 방향의 움직임 변화량(event.delta.dy)을
+          // ScrollController의 현재 위치에 더하거나 빼서 화면을 강제로 스크롤합니다.
+          _scrollController.jumpTo(_scrollController.offset - event.delta.dy);
+        },
+        child: TableCalendar(
+          locale: 'ko_KR',
+          firstDay: DateTime.utc(2024, 1, 1),
+          lastDay: DateTime.utc(2030, 12, 31),
+          focusedDay: _focusedDay,
+          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+          onDaySelected: (selectedDay, focusedDay) => setState(() {
+            _selectedDay = selectedDay;
+            _focusedDay = focusedDay;
+          }),
+          calendarStyle: const CalendarStyle(
+            todayDecoration: BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
+            selectedDecoration: BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+            markerDecoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+          ),
+          headerStyle: const HeaderStyle(formatButtonVisible: false, titleCentered: true),
+          eventLoader: (day) => _dailyStats.containsKey(_formatDate(day)) ? ['data'] : [],
         ),
-        headerStyle: const HeaderStyle(formatButtonVisible: false, titleCentered: true),
-        eventLoader: (day) => _dailyStats.containsKey(_formatDate(day)) ? ['data'] : [],
       ),
     );
   }
