@@ -13,7 +13,7 @@ class StatsScreen extends StatefulWidget {
 }
 
 class _StatsScreenState extends State<StatsScreen> {
-  // ★ 1. 스크롤 컨트롤러 선언 (Listener와 함께 사용)
+  // 스크롤 문제 해결을 위한 컨트롤러
   late final ScrollController _scrollController;
 
   // 캘린더 설정
@@ -38,13 +38,11 @@ class _StatsScreenState extends State<StatsScreen> {
   bool _isLoading = true;
   final Map<String, Map<String, double>> _dailyStats = {};
 
-  // 차트에 표시될 실제 날짜와 x축 인덱스를 매핑하기 위한 변수
-  final List<DateTime> _chartDates = [];
+  // ★★★ 동적 X축을 위한 _chartDates 리스트를 제거합니다 ★★★
 
   @override
   void initState() {
     super.initState();
-    // ★ 2. 스크롤 컨트롤러 초기화
     _scrollController = ScrollController();
     _selectedDay = _focusedDay;
     _fetchMonthlyData();
@@ -52,7 +50,6 @@ class _StatsScreenState extends State<StatsScreen> {
 
   @override
   void dispose() {
-    // ★ 3. 스크롤 컨트롤러 해제
     _scrollController.dispose();
     super.dispose();
   }
@@ -126,7 +123,6 @@ class _StatsScreenState extends State<StatsScreen> {
     }
   }
 
-
   static String _formatDate(DateTime date) => DateFormat('yyyy-MM-dd').format(date);
 
   @override
@@ -141,7 +137,6 @@ class _StatsScreenState extends State<StatsScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-      // ★ 4. SingleChildScrollView에 컨트롤러 연결
           : SingleChildScrollView(
         controller: _scrollController,
         child: Column(
@@ -206,19 +201,16 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   LineChartData _buildLineChartData() {
-    _chartDates.clear();
+    // _chartDates.clear()를 제거합니다.
 
     return LineChartData(
-      gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 50),
       lineTouchData: LineTouchData(
         touchTooltipData: LineTouchTooltipData(
           fitInsideHorizontally: true,
           fitInsideVertically: true,
           getTooltipItems: (spots) => spots.map((spot) {
-            final int index = spot.x.toInt();
-            if (index < 0 || index >= _chartDates.length) return null;
-
-            final date = _chartDates[index];
+            // ★★★ 툴팁의 날짜도 고정된 X축 인덱스로 계산합니다.
+            final date = DateTime.now().subtract(Duration(days: 6 - spot.x.toInt()));
             final dateKey = _formatDate(date);
             final dailyData = _dailyStats[dateKey];
             final color = spot.bar.color ?? Colors.black;
@@ -240,9 +232,10 @@ class _StatsScreenState extends State<StatsScreen> {
               '${DateFormat('M/d').format(date)}\n$label: ${spot.y.toInt()}% (${realValue.toInt()}$unit)',
               const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
             );
-          }).whereType<LineTooltipItem>().toList(),
+          }).toList(),
         ),
       ),
+      gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 50),
       titlesData: _buildTitles(),
       borderData: FlBorderData(show: false),
       extraLinesData: ExtraLinesData(
@@ -267,42 +260,40 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  // isStepLineChart 관련 속성을 제거하고 기본 LineChartBarData로 복원
   LineChartBarData _buildLine(Color color, String key, double goal) {
     return LineChartBarData(
       spots: _getPercentageSpots(key, goal),
-      isCurved: false,
+      isCurved: true, // 선을 부드럽게
       color: color,
       barWidth: 3,
       isStrokeCapRound: true,
-      dotData: FlDotData(show: true,
-        getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(radius: 3, color: Colors.white, strokeWidth: 2, strokeColor: color),
-      ),
+      dotData: FlDotData(show: true),
     );
   }
 
+  // ★★★ 기록이 있는 날의 데이터만 spots 리스트에 추가하는 로직은 그대로 유지 ★★★
   List<FlSpot> _getPercentageSpots(String key, double goal) {
     List<FlSpot> spots = [];
-    bool shouldFillChartDates = _chartDates.isEmpty;
-
     for (int i = 0; i < 7; i++) {
       final date = DateTime.now().subtract(Duration(days: 6 - i));
       final dateKey = _formatDate(date);
 
+      // 데이터가 없는 날은 건너뛴다 (선은 이 지점을 무시하고 그려짐)
       if (!_dailyStats.containsKey(dateKey)) {
         continue;
       }
 
       final value = _dailyStats[dateKey]![key] ?? 0;
       final double percentage = (goal == 0) ? 0 : (value / goal * 100);
-      spots.add(FlSpot(spots.length.toDouble(), percentage));
 
-      if (shouldFillChartDates) {
-        _chartDates.add(date);
-      }
+      // X축은 0부터 6까지의 고정된 인덱스를 사용한다.
+      spots.add(FlSpot(i.toDouble(), percentage));
     }
     return spots;
   }
 
+  // ★★★ 핵심 수정: 하단 타이틀이 항상 7일 전체를 표시하도록 수정 ★★★
   FlTitlesData _buildTitles() {
     return FlTitlesData(
       bottomTitles: AxisTitles(
@@ -311,11 +302,8 @@ class _StatsScreenState extends State<StatsScreen> {
           reservedSize: 30,
           interval: 1,
           getTitlesWidget: (value, meta) {
-            final int index = value.toInt();
-            if (index < 0 || index >= _chartDates.length) {
-              return const SizedBox.shrink();
-            }
-            final date = _chartDates[index];
+            // X축 값(0~6)에 해당하는 날짜를 항상 계산하여 표시
+            final date = DateTime.now().subtract(Duration(days: 6 - value.toInt()));
             return Padding(
               padding: const EdgeInsets.only(top: 8.0),
               child: Text(
@@ -339,16 +327,12 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  // ★ 5. TableCalendar를 Listener 위젯으로 감싸는 최종 수정
+  // 캘린더 스크롤 문제 해결을 위한 Listener 위젯은 그대로 유지
   Widget _buildCalendarSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      // 가장 원시적인 포인터 이벤트를 감지하는 Listener 위젯 사용
       child: Listener(
-        // 손가락이 화면 위에서 움직일 때마다 호출됨
         onPointerMove: (PointerMoveEvent event) {
-          // 수직(Y) 방향의 움직임 변화량(event.delta.dy)을
-          // ScrollController의 현재 위치에 더하거나 빼서 화면을 강제로 스크롤합니다.
           _scrollController.jumpTo(_scrollController.offset - event.delta.dy);
         },
         child: TableCalendar(
