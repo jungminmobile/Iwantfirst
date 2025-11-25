@@ -3,19 +3,25 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class EditProfileScreen extends StatefulWidget {
-  const EditProfileScreen({super.key});@override
+  const EditProfileScreen({super.key});
+
+  @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // 컨트롤러 추가
+  // --- 1. 컨트롤러 추가 ---
   final _nameController = TextEditingController();
   final _heightController = TextEditingController();
-  final _targetCaloriesController = TextEditingController(); // 목표 칼로리 컨트롤러
-  String? _selectedGender;
+  final _targetCaloriesController = TextEditingController();
+  // ★★★ 목표 탄/단/지 컨트롤러 추가 ★★★
+  final _targetCarbsController = TextEditingController();
+  final _targetProteinController = TextEditingController();
+  final _targetFatController = TextEditingController();
 
+  String? _selectedGender;
   bool _isLoading = true;
   final User? currentUser = FirebaseAuth.instance.currentUser;
 
@@ -25,7 +31,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _loadUserData();
   }
 
-  // 데이터 로딩 함수 수정
+  // --- 2. 데이터 로딩 함수 수정 ---
   Future<void> _loadUserData() async {
     if (currentUser == null) {
       if (mounted) setState(() => _isLoading = false);
@@ -40,17 +46,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       if (doc.exists) {
         final data = doc.data()!;
-        // profile 데이터 로드
         if (data.containsKey('profile')) {
           final profileData = data['profile'] as Map<String, dynamic>;
           _nameController.text = profileData['name'] ?? '';
           _heightController.text = (profileData['height'] as num?)?.toString() ?? '';
           _selectedGender = profileData['gender'];
         }
-        // goals 데이터 로드
+
+        // ★★★ goals 데이터 로드 로직 수정 ★★★
         if (data.containsKey('goals')) {
           final goalsData = data['goals'] as Map<String, dynamic>;
           _targetCaloriesController.text = (goalsData['target_calories'] as num?)?.toString() ?? '';
+          _targetCarbsController.text = (goalsData['target_carbs'] as num?)?.toString() ?? '';
+          _targetProteinController.text = (goalsData['target_protein'] as num?)?.toString() ?? '';
+          _targetFatController.text = (goalsData['target_fat'] as num?)?.toString() ?? '';
         }
       }
     } catch (e) {
@@ -62,7 +71,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  // 저장 함수 수정
+  // --- 4. 저장 함수 수정 ---
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate() || currentUser == null) {
       return;
@@ -70,7 +79,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() { _isLoading = true; });
 
     try {
-      // profile과 goals 필드를 모두 업데이트
+      // ★★★ profile과 모든 goals 필드를 함께 업데이트 ★★★
       await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUser!.uid)
@@ -79,6 +88,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'profile.height': double.tryParse(_heightController.text.trim()) ?? 0.0,
         'profile.gender': _selectedGender,
         'goals.target_calories': int.tryParse(_targetCaloriesController.text.trim()) ?? 0,
+        'goals.target_carbs': int.tryParse(_targetCarbsController.text.trim()) ?? 0,
+        'goals.target_protein': int.tryParse(_targetProteinController.text.trim()) ?? 0,
+        'goals.target_fat': int.tryParse(_targetFatController.text.trim()) ?? 0,
       });
 
       if (mounted) {
@@ -108,105 +120,96 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // 이름 입력 필드 (생략되지 않은 전체 코드)
-                TextFormField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: '이름',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return '이름을 입력해주세요.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text("프로필 정보", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: '이름', border: OutlineInputBorder()),
+                validator: (v) => (v == null || v.trim().isEmpty) ? '이름을 입력해주세요.' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _heightController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: '키 (cm)', border: OutlineInputBorder()),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return '키를 입력해주세요.';
+                  if (double.tryParse(v) == null) return '숫자 또는 소수점만 입력해주세요.';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedGender,
+                decoration: const InputDecoration(labelText: '성별', border: OutlineInputBorder()),
+                items: ['남성', '여성'].map((l) => DropdownMenuItem(value: l, child: Text(l))).toList(),
+                onChanged: (v) => setState(() => _selectedGender = v),
+                validator: (v) => v == null ? '성별을 선택해주세요.' : null,
+              ),
+              const SizedBox(height: 32),
 
-                // 키 입력 필드 (생략되지 않은 전체 코드)
-                TextFormField(
-                  controller: _heightController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: '키 (cm)',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return '키를 입력해주세요.';
-                    }
-                    if (double.tryParse(value) == null) {
-                      return '숫자 또는 소수점만 입력해주세요.';
-                    }
-                    return null;
-                  },
+              // --- 3. UI 변경 ---
+              const Text("목표 설정", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _targetCaloriesController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: '목표 칼로리 (kcal)', border: OutlineInputBorder()),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return '목표 칼로리를 입력해주세요.';
+                  if (int.tryParse(v) == null) return '숫자만 입력해주세요.';
+                  return null;
+                },
+              ),
+              // ★★★ 탄/단/지 입력 필드 추가 ★★★
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _targetCarbsController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: '목표 탄수화물 (g)', border: OutlineInputBorder()),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return '목표 탄수화물을 입력해주세요.';
+                  if (int.tryParse(v) == null) return '숫자만 입력해주세요.';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _targetProteinController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: '목표 단백질 (g)', border: OutlineInputBorder()),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return '목표 단백질을 입력해주세요.';
+                  if (int.tryParse(v) == null) return '숫자만 입력해주세요.';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _targetFatController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: '목표 지방 (g)', border: OutlineInputBorder()),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return '목표 지방을 입력해주세요.';
+                  if (int.tryParse(v) == null) return '숫자만 입력해주세요.';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: _isLoading ? null : _saveProfile,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                const SizedBox(height: 16),
-
-                // ▼▼▼ [오류 수정] DropdownButtonFormField의 전체 코드를 복원 ▼▼▼
-                DropdownButtonFormField<String>(
-                  value: _selectedGender,
-                  decoration: const InputDecoration(
-                    labelText: '성별',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: ['남성', '여성']
-                      .map((label) => DropdownMenuItem(
-                    value: label,
-                    child: Text(label),
-                  ))
-                      .toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedGender = value;
-                    });
-                  },
-                  validator: (value) {
-                    if (value == null) {
-                      return '성별을 선택해주세요.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // 목표 칼로리 입력 필드
-                TextFormField(
-                  controller: _targetCaloriesController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: '목표 칼로리 (kcal)',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return '목표 칼로리를 입력해주세요.';
-                    }
-                    if (int.tryParse(value) == null) {
-                      return '숫자만 입력해주세요.';
-                    }
-                    return null;
-                  },
-                ),
-
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _saveProfile,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: const Text('저장하기'),
-                ),
-              ],
-            ),
+                child: const Text('저장하기'),
+              ),
+            ],
           ),
         ),
       ),
@@ -218,6 +221,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _nameController.dispose();
     _heightController.dispose();
     _targetCaloriesController.dispose();
+    // ★★★ 추가된 컨트롤러들도 dispose 해줘야 합니다 ★★★
+    _targetCarbsController.dispose();
+    _targetProteinController.dispose();
+    _targetFatController.dispose();
     super.dispose();
   }
 }

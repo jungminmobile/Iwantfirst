@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Firebase와 Firestore 인스턴스 (Auth는 로그인, Firestore는 데이터 저장 담당)
+// Firebase와 Firestore 인스턴스
 final _auth = FirebaseAuth.instance;
 final _firestore = FirebaseFirestore.instance;
 const String _userCollectionPath = 'users';
@@ -15,22 +15,24 @@ class SignUpPage extends StatefulWidget {
 }
 
 class _SignUpPageState extends State<SignUpPage> {
-  // 입력 컨트롤러들
+  // --- (1/3) 컨트롤러 추가 ---
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
   final _heightController = TextEditingController();
   final _goalCalorieController = TextEditingController();
+  // ★★★ 목표 탄/단/지 컨트롤러 추가 ★★★
+  final _goalCarbsController = TextEditingController();
+  final _goalProteinController = TextEditingController();
+  final _goalFatController = TextEditingController();
 
   String _selectedGender = '남성';
   bool _isLoading = false;
 
   Future<void> _signUp() async {
-    setState(() {
-      _isLoading = true;
-    });
+    // 로딩 및 유효성 검사 로직은 그대로 유지
+    setState(() { _isLoading = true; });
 
-    // 입력값 유효성 검사 (간단하게)
     if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('이메일과 비밀번호를 입력해주세요.')));
@@ -40,7 +42,7 @@ class _SignUpPageState extends State<SignUpPage> {
     }
 
     try {
-      // 1. Firebase Authentication에 사용자 생성 (경비실에 신분 등록)
+      // 1. Firebase Authentication에 사용자 생성
       final UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -48,54 +50,45 @@ class _SignUpPageState extends State<SignUpPage> {
 
       final String uid = userCredential.user!.uid;
 
-      // 2. Firestore에 사용자 데이터 저장 (데이터베이스 창고에 짐 보관)
-      //    사용자 데이터 구조: users/{uid} 문서 안에 계정, 프로필, 목표 저장
+      // --- (2/3) Firestore 데이터 저장 로직 수정 ---
+      // 2. Firestore에 사용자 데이터 저장
       await _firestore.collection(_userCollectionPath).doc(uid).set({
-
         'account_info': {
           'email': _emailController.text.trim(),
-          'created_at': FieldValue.serverTimestamp(), // Firestore 서버 시간으로 가입 시간 기록
+          'created_at': FieldValue.serverTimestamp(),
         },
-
         'profile': {
           'name': _nameController.text.trim(),
           'height': double.tryParse(_heightController.text) ?? 0.0,
           'gender': _selectedGender,
-          // 여기에 'age', 'weight' 등 필드를 나중에 추가해도 됩니다.
         },
-
+        // ★★★ goals 맵에 새로운 필드들 추가 ★★★
         'goals': {
           'target_calories': int.tryParse(_goalCalorieController.text) ?? 2000,
+          'target_carbs': int.tryParse(_goalCarbsController.text) ?? 0,
+          'target_protein': int.tryParse(_goalProteinController.text) ?? 0,
+          'target_fat': int.tryParse(_goalFatController.text) ?? 0,
         },
-
-        // 'daily_logs' 서브 컬렉션은 첫 기록 시 자동으로 생성됩니다.
       });
 
+      // 회원가입 성공 후 로직은 그대로 유지
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('회원가입 성공! 이제 로그인하세요.')),
         );
-        Navigator.pop(context); // 가입 후 로그인 페이지로 돌아가기
+        Navigator.pop(context);
       }
 
     } on FirebaseAuthException catch (e) {
-      // Firebase Auth 관련 에러 처리
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('회원가입 에러: ${e.message}')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('회원가입 에러: ${e.message}')));
       }
     } catch (e) {
-      // 일반 에러 처리
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('알 수 없는 에러: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('알 수 없는 에러: $e')));
       }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() { _isLoading = false; });
     }
   }
 
@@ -126,7 +119,16 @@ class _SignUpPageState extends State<SignUpPage> {
 
             const SizedBox(height: 30),
             const Text("목표 설정", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            // --- (3/3) UI에 TextField 추가 ---
             TextField(controller: _goalCalorieController, decoration: const InputDecoration(labelText: '하루 목표 칼로리 (kcal)'), keyboardType: TextInputType.number),
+            // ★★★ 목표 탄/단/지 입력 필드 추가 ★★★
+            const SizedBox(height: 8),
+            TextField(controller: _goalCarbsController, decoration: const InputDecoration(labelText: '하루 목표 탄수화물 (g)'), keyboardType: TextInputType.number),
+            const SizedBox(height: 8),
+            TextField(controller: _goalProteinController, decoration: const InputDecoration(labelText: '하루 목표 단백질 (g)'), keyboardType: TextInputType.number),
+            const SizedBox(height: 8),
+            TextField(controller: _goalFatController, decoration: const InputDecoration(labelText: '하루 목표 지방 (g)'), keyboardType: TextInputType.number),
+
 
             const SizedBox(height: 40),
             SizedBox(
