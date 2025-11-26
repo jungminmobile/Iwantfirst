@@ -114,12 +114,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // ✨ [수정 1] 배경색을 옅은 회색으로 변경 (흰색 카드가 돋보이게)
+      backgroundColor: Colors.grey[100],
+
       appBar: AppBar(
         title: const Text(
           '오늘의 식단',
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.white, // 앱바는 흰색 유지 (깔끔하게)
         elevation: 0,
         actions: [
           IconButton(
@@ -139,48 +142,67 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1. 칼로리 섹션
-                  const Text(
-                    "칼로리 현황",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  // 🏝️ [수정 2] 1번 섬: 칼로리 섹션
+                  _buildSectionCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "칼로리 현황",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // 기존 칼로리 차트
+                        CalorieChart(current: _currentCal, target: _targetCal),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 20),
 
-                  // 기존 칼로리 차트
-                  CalorieChart(current: _currentCal, target: _targetCal),
+                  const SizedBox(height: 10), // 섬 사이 간격 조금 더 벌리기
+                  // 🏝️ [수정 3] 2번 섬: 영양소 섹션
+                  _buildSectionCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "영양소 상세",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
 
-                  const SizedBox(height: 40),
-
-                  // 2. 탄단지 섹션
-                  const Text(
-                    "영양소 상세",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // 원형 그래프 3개
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildMacroCircle(
-                        "탄수화물",
-                        _currentCarbs,
-                        _targetCarbs,
-                        Colors.green,
-                      ),
-                      _buildMacroCircle(
-                        "단백질",
-                        _currentProtein,
-                        _targetProtein,
-                        Colors.blue,
-                      ),
-                      _buildMacroCircle(
-                        "지방",
-                        _currentFat,
-                        _targetFat,
-                        Colors.orange,
-                      ),
-                    ],
+                        // 원형 그래프 3개
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildMacroCircle(
+                              "탄수화물",
+                              _currentCarbs,
+                              _targetCarbs,
+                              Colors.green,
+                            ),
+                            _buildMacroCircle(
+                              "단백질",
+                              _currentProtein,
+                              _targetProtein,
+                              Colors.blue,
+                            ),
+                            _buildMacroCircle(
+                              "지방",
+                              _currentFat,
+                              _targetFat,
+                              Colors.orange,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -189,7 +211,8 @@ class _HomeScreenState extends State<HomeScreen> {
         onPressed: () {
           print("식단 입력 버튼 클릭됨");
         },
-        backgroundColor: Colors.blue,
+        backgroundColor: const Color(0xFF33FF00), // 아까 설정한 메인 색상
+        foregroundColor: Colors.black,
         child: const Icon(Icons.add),
       ),
     );
@@ -297,6 +320,28 @@ class _HomeScreenState extends State<HomeScreen> {
           style: const TextStyle(color: Colors.grey, fontSize: 12),
         ),
       ],
+    );
+  }
+
+  // 📦 [추가] 섹션을 섬처럼 만들어주는 카드 위젯
+  Widget _buildSectionCard({required Widget child}) {
+    return Container(
+      width: double.infinity, // 가로 꽉 채우기
+      margin: const EdgeInsets.only(bottom: 16.0), // 카드 간 간격
+      padding: const EdgeInsets.all(20.0), // 카드 내부 여백
+      decoration: BoxDecoration(
+        color: Colors.white, // 카드 배경색 (흰색)
+        borderRadius: BorderRadius.circular(20), // 둥근 모서리
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1), // 아주 연한 그림자
+            spreadRadius: 2,
+            blurRadius: 10,
+            offset: const Offset(0, 3), // 그림자 위치
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 }
