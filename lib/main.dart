@@ -15,9 +15,7 @@ void main() async {
   await initializeDateFormatting();
 
   // Firebase 초기화
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   try {
     // FirebaseAuth 인스턴스를 가져와서 null이 아닌지 확인합니다.
     print("✅ Firebase Auth Instance: ${FirebaseAuth.instance}");
@@ -37,6 +35,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false, // 오른쪽 위 'Debug' 띠 제거
       title: 'AI 식단 관리',
       theme: ThemeData(
+        fontFamily: 'Suite',
         // 전체 테마 색상을 초록색 계열로 변경 (식단 관리 느낌)
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
@@ -48,7 +47,7 @@ class MyApp extends StatelessWidget {
             return const MainScreen(); // 로그인 상태
           }
           print("로그아웃 화면\n");
-          return const LoginPage();  // 로그아웃 상태
+          return const LoginPage(); // 로그아웃 상태
         },
       ),
     );
