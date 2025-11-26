@@ -43,12 +43,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       // 1. 목표 가져오기
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
       if (userDoc.exists && userDoc.data()!.containsKey('goals')) {
         var goals = userDoc.data()!['goals'];
         if (mounted) {
           setState(() {
-            if (goals['target_calories'] != null) _targetCal = (goals['target_calories'] as num).toDouble();
+            if (goals['target_calories'] != null)
+              _targetCal = (goals['target_calories'] as num).toDouble();
             // 탄단지 목표 - DB에 있으면 가져오고, 없으면 비율로 계산
             _targetCarbs = (_targetCal * 0.5) / 4;
             _targetProtein = (_targetCal * 0.3) / 4;
@@ -83,6 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
               if (value is String) return double.tryParse(value) ?? 0.0;
               return 0.0;
             }
+
             tempCal += safeParse(food['calories']);
             tempCarbs += safeParse(food['carbs']);
             tempProtein += safeParse(food['protein']);
@@ -100,7 +105,6 @@ class _HomeScreenState extends State<HomeScreen> {
           _isLoading = false;
         });
       }
-
     } catch (e) {
       print("❌ 홈 데이터 불러오기 실패: $e");
       if (mounted) setState(() => _isLoading = false);
@@ -111,55 +115,76 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('오늘의 식단', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        title: const Text(
+          '오늘의 식단',
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
-              onPressed: _fetchTodayData,
-              icon: const Icon(Icons.refresh, color: Colors.black)
+            onPressed: _fetchTodayData,
+            icon: const Icon(Icons.refresh, color: Colors.black),
           ),
           IconButton(
-              onPressed: (){},
-              icon: const Icon(Icons.calendar_today, color: Colors.black)
+            onPressed: () {},
+            icon: const Icon(Icons.calendar_today, color: Colors.black),
           ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. 칼로리 섹션
-            const Text("칼로리 현황", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. 칼로리 섹션
+                  const Text(
+                    "칼로리 현황",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 20),
 
-            // 기존 칼로리 차트
-            CalorieChart(
-              current: _currentCal,
-              target: _targetCal,
+                  // 기존 칼로리 차트
+                  CalorieChart(current: _currentCal, target: _targetCal),
+
+                  const SizedBox(height: 40),
+
+                  // 2. 탄단지 섹션
+                  const Text(
+                    "영양소 상세",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // 원형 그래프 3개
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildMacroCircle(
+                        "탄수화물",
+                        _currentCarbs,
+                        _targetCarbs,
+                        Colors.green,
+                      ),
+                      _buildMacroCircle(
+                        "단백질",
+                        _currentProtein,
+                        _targetProtein,
+                        Colors.blue,
+                      ),
+                      _buildMacroCircle(
+                        "지방",
+                        _currentFat,
+                        _targetFat,
+                        Colors.orange,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-
-            const SizedBox(height: 40),
-
-            // 2. 탄단지 섹션
-            const Text("영양소 상세", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
-
-            // 원형 그래프 3개
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildMacroCircle("탄수화물", _currentCarbs, _targetCarbs, Colors.green),
-                _buildMacroCircle("단백질", _currentProtein, _targetProtein, Colors.blue),
-                _buildMacroCircle("지방", _currentFat, _targetFat, Colors.orange),
-              ],
-            ),
-          ],
-        ),
-      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           print("식단 입력 버튼 클릭됨");
@@ -171,7 +196,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // 🔥 [수정 완료] 탄단지 원형 그래프 빌더 함수
-  Widget _buildMacroCircle(String label, double current, double target, Color color) {
+  Widget _buildMacroCircle(
+    String label,
+    double current,
+    double target,
+    Color color,
+  ) {
     // 실제 퍼센트 계산
     double rawPercentage = (target == 0) ? 0 : (current / target * 100);
     bool isOver = rawPercentage > 100;
@@ -182,7 +212,9 @@ class _HomeScreenState extends State<HomeScreen> {
     // --- [수정된 부분] 색상 진하게 만들기 ---
     // withLightness 안에는 함수가 아니라 숫자가 들어가야 합니다.
     HSLColor hsl = HSLColor.fromColor(color);
-    Color darkerColor = hsl.withLightness((hsl.lightness * 0.6).clamp(0.0, 1.0)).toColor();
+    Color darkerColor = hsl
+        .withLightness((hsl.lightness * 0.6).clamp(0.0, 1.0))
+        .toColor();
     // ------------------------------------
 
     return Column(
@@ -255,7 +287,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
         const SizedBox(height: 4),
         Text(
           "${current.toInt()} / ${target.toInt()}g",
