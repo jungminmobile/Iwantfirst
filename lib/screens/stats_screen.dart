@@ -51,29 +51,35 @@ class _StatsScreenState extends State<StatsScreen> {
 
     try {
       // 1. [추가됨] 사용자의 '목표(Goals)' 먼저 가져오기
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
       if (userDoc.exists && userDoc.data()!.containsKey('goals')) {
         var goals = userDoc.data()!['goals'];
         if (mounted) {
           setState(() {
             // DB에 있는 값으로 목표 변수 업데이트 (없으면 기본값 유지)
-            if (goals['target_calories'] != null) _goalCal = (goals['target_calories'] as num).toDouble();
+            if (goals['target_calories'] != null)
+              _goalCal = (goals['target_calories'] as num).toDouble();
 
             // 탄단지 목표가 DB에 따로 없으면 칼로리 기반으로 자동 계산 (비율 예시: 5:3:2)
             // 만약 DB에 저장하고 있다면 아래처럼 가져오면 됩니다.
             // if (goals['target_carbs'] != null) _goalCarbs = (goals['target_carbs'] as num).toDouble();
 
             // (임시) 칼로리 기반 자동 계산 (필요 없으면 지우세요)
-            _goalCarbs = (_goalCal * 0.5) / 4;   // 50%
+            _goalCarbs = (_goalCal * 0.5) / 4; // 50%
             _goalProtein = (_goalCal * 0.3) / 4; // 30%
-            _goalFat = (_goalCal * 0.2) / 9;     // 20%
+            _goalFat = (_goalCal * 0.2) / 9; // 20%
           });
         }
       }
 
       // 2. 식단 데이터 가져오기 (collectionGroup)
       // *주의: 파이어베이스 콘솔에서 '보안 규칙'이 설정되어 있어야 에러가 안 납니다.
-      final snapshot = await FirebaseFirestore.instance.collectionGroup('meals').get();
+      final snapshot = await FirebaseFirestore.instance
+          .collectionGroup('meals')
+          .get();
 
       Map<String, Map<String, double>> tempStats = {};
 
@@ -101,6 +107,7 @@ class _StatsScreenState extends State<StatsScreen> {
               if (value is String) return double.tryParse(value) ?? 0.0;
               return 0.0;
             }
+
             totalCal += safeParse(food['calories']);
             totalCarbs += safeParse(food['carbs']);
             totalProtein += safeParse(food['protein']);
@@ -110,8 +117,10 @@ class _StatsScreenState extends State<StatsScreen> {
 
         if (tempStats.containsKey(dateStr)) {
           tempStats[dateStr]!['cal'] = tempStats[dateStr]!['cal']! + totalCal;
-          tempStats[dateStr]!['carbs'] = tempStats[dateStr]!['carbs']! + totalCarbs;
-          tempStats[dateStr]!['protein'] = tempStats[dateStr]!['protein']! + totalProtein;
+          tempStats[dateStr]!['carbs'] =
+              tempStats[dateStr]!['carbs']! + totalCarbs;
+          tempStats[dateStr]!['protein'] =
+              tempStats[dateStr]!['protein']! + totalProtein;
           tempStats[dateStr]!['fat'] = tempStats[dateStr]!['fat']! + totalFat;
         } else {
           tempStats[dateStr] = {
@@ -150,26 +159,26 @@ class _StatsScreenState extends State<StatsScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _fetchMonthlyData,
-          )
+          ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            _buildChartSection(),
-            const SizedBox(height: 20),
-            const Divider(thickness: 8, color: Color(0xFFF5F5F5)),
-            const SizedBox(height: 10),
-            _buildCalendarSection(),
-            const SizedBox(height: 20),
-            _buildSelectedDayStats(),
-            const SizedBox(height: 40),
-          ],
-        ),
-      ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  _buildChartSection(),
+                  const SizedBox(height: 20),
+                  const Divider(thickness: 8, color: Color(0xFFF5F5F5)),
+                  const SizedBox(height: 10),
+                  _buildCalendarSection(),
+                  const SizedBox(height: 20),
+                  _buildSelectedDayStats(),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
     );
   }
 
@@ -183,10 +192,13 @@ class _StatsScreenState extends State<StatsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('최근 7일 달성률 (%)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text(
+                '최근 7일 달성률 (%)',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
               Text(
-                  '목표: ${_goalCal.toInt()} kcal',
-                  style: const TextStyle(color: Colors.grey, fontSize: 12)
+                '목표: ${_goalCal.toInt()} kcal',
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
             ],
           ),
@@ -204,12 +216,7 @@ class _StatsScreenState extends State<StatsScreen> {
 
           const SizedBox(height: 20),
 
-          SizedBox(
-            height: 250,
-            child: LineChart(
-              _buildLineChartData(),
-            ),
-          ),
+          SizedBox(height: 250, child: LineChart(_buildLineChartData())),
         ],
       ),
     );
@@ -286,7 +293,10 @@ class _StatsScreenState extends State<StatsScreen> {
 
               return LineTooltipItem(
                 '$label\n${barSpot.y.toInt()}% (${realValue.toInt()}$unit)',
-                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               );
             }).toList();
           },
@@ -307,7 +317,11 @@ class _StatsScreenState extends State<StatsScreen> {
               show: true,
               alignment: Alignment.topRight,
               padding: const EdgeInsets.only(right: 5, bottom: 5),
-              style: const TextStyle(color: Colors.black54, fontSize: 10, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: Colors.black54,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
               labelResolver: (line) => 'Goal 100%',
             ),
           ),
@@ -315,10 +329,14 @@ class _StatsScreenState extends State<StatsScreen> {
       ),
 
       lineBarsData: [
-        if (_chartVisibility['cal']!) _buildLine(Colors.redAccent, 'cal', _goalCal),
-        if (_chartVisibility['carbs']!) _buildLine(Colors.green, 'carbs', _goalCarbs),
-        if (_chartVisibility['protein']!) _buildLine(Colors.blue, 'protein', _goalProtein),
-        if (_chartVisibility['fat']!) _buildLine(Colors.orange, 'fat', _goalFat),
+        if (_chartVisibility['cal']!)
+          _buildLine(Colors.redAccent, 'cal', _goalCal),
+        if (_chartVisibility['carbs']!)
+          _buildLine(Colors.green, 'carbs', _goalCarbs),
+        if (_chartVisibility['protein']!)
+          _buildLine(Colors.blue, 'protein', _goalProtein),
+        if (_chartVisibility['fat']!)
+          _buildLine(Colors.orange, 'fat', _goalFat),
       ],
 
       minY: 0,
@@ -333,14 +351,17 @@ class _StatsScreenState extends State<StatsScreen> {
       color: color,
       barWidth: 3,
       isStrokeCapRound: true,
-      dotData: FlDotData(show: true, getDotPainter: (spot, percent, barData, index) {
-        return FlDotCirclePainter(
-          radius: 3,
-          color: Colors.white,
-          strokeWidth: 2,
-          strokeColor: color,
-        );
-      }),
+      dotData: FlDotData(
+        show: true,
+        getDotPainter: (spot, percent, barData, index) {
+          return FlDotCirclePainter(
+            radius: 3,
+            color: Colors.white,
+            strokeWidth: 2,
+            strokeColor: color,
+          );
+        },
+      ),
     );
   }
 
@@ -365,7 +386,9 @@ class _StatsScreenState extends State<StatsScreen> {
           reservedSize: 30,
           interval: 1,
           getTitlesWidget: (value, meta) {
-            final date = DateTime.now().subtract(Duration(days: 6 - value.toInt()));
+            final date = DateTime.now().subtract(
+              Duration(days: 6 - value.toInt()),
+            );
             return Padding(
               padding: const EdgeInsets.only(top: 8.0),
               child: Text(
@@ -383,7 +406,10 @@ class _StatsScreenState extends State<StatsScreen> {
           interval: 50,
           getTitlesWidget: (value, meta) {
             if (value == 0) return const SizedBox.shrink();
-            return Text('${value.toInt()}%', style: const TextStyle(color: Colors.grey, fontSize: 10));
+            return Text(
+              '${value.toInt()}%',
+              style: const TextStyle(color: Colors.grey, fontSize: 10),
+            );
           },
         ),
       ),
@@ -410,9 +436,18 @@ class _StatsScreenState extends State<StatsScreen> {
           });
         },
         calendarStyle: const CalendarStyle(
-          todayDecoration: BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
-          selectedDecoration: BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
-          markerDecoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+          todayDecoration: BoxDecoration(
+            color: const Color(0xFF33CC80),
+            shape: BoxShape.circle,
+          ),
+          selectedDecoration: BoxDecoration(
+            color: const Color(0xFF33CCFF),
+            shape: BoxShape.circle,
+          ),
+          markerDecoration: BoxDecoration(
+            color: Colors.orange,
+            shape: BoxShape.circle,
+          ),
         ),
         headerStyle: const HeaderStyle(
           formatButtonVisible: false,
@@ -438,32 +473,59 @@ class _StatsScreenState extends State<StatsScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(color: Colors.grey.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5)),
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
           ],
           border: Border.all(color: Colors.grey.shade200),
         ),
         child: Column(
           children: [
             Text(
-              DateFormat('M월 d일 (E)', 'ko_KR').format(_selectedDay ?? DateTime.now()),
+              DateFormat(
+                'M월 d일 (E)',
+                'ko_KR',
+              ).format(_selectedDay ?? DateTime.now()),
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 15),
             if (data != null) ...[
-              _buildStatRow('총 섭취 칼로리', '${data['cal']!.toInt()} kcal', Colors.black, true),
+              _buildStatRow(
+                '총 섭취 칼로리',
+                '${data['cal']!.toInt()} kcal',
+                Colors.black,
+                true,
+              ),
               const Divider(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildMacroItem('탄수화물', '${data['carbs']!.toInt()}g', Colors.green),
-                  _buildMacroItem('단백질', '${data['protein']!.toInt()}g', Colors.blue),
-                  _buildMacroItem('지방', '${data['fat']!.toInt()}g', Colors.orange),
+                  _buildMacroItem(
+                    '탄수화물',
+                    '${data['carbs']!.toInt()}g',
+                    Colors.green,
+                  ),
+                  _buildMacroItem(
+                    '단백질',
+                    '${data['protein']!.toInt()}g',
+                    Colors.blue,
+                  ),
+                  _buildMacroItem(
+                    '지방',
+                    '${data['fat']!.toInt()}g',
+                    Colors.orange,
+                  ),
                 ],
               ),
             ] else ...[
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
-                child: Text('기록된 식단이 없습니다.', style: TextStyle(color: Colors.grey)),
+                child: Text(
+                  '기록된 식단이 없습니다.',
+                  style: TextStyle(color: Colors.grey),
+                ),
               ),
             ],
           ],
@@ -494,7 +556,14 @@ class _StatsScreenState extends State<StatsScreen> {
       children: [
         Text(label, style: const TextStyle(fontSize: 14, color: Colors.grey)),
         const SizedBox(height: 4),
-        Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
       ],
     );
   }
