@@ -266,7 +266,6 @@ class _CameraScreenState extends State<CameraScreen> {
           ),
         );
         if (result == true) {
-          _clearInputData(mealType);
           _fetchFirebaseData();
         }
       } else {
