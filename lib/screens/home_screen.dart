@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-// 기존 위젯 import
+// 위젯 import
 import '../widgets/calorie_chart.dart';
+import '../widgets/macro_chart.dart'; // 👈 새로 만든 막대그래프 파일 import
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -36,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchTodayData();
   }
 
-  // 🔥 오늘 데이터 가져오기 (수정된 버전)
+  // 🔥 오늘 데이터 가져오기
   Future<void> _fetchTodayData() async {
     if (!_isLoading) {
       setState(() {
@@ -120,14 +121,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 📅 [추가됨] 오늘 날짜 가져오기 (예: 11월 28일)
-    // 'ko_KR'이 설정 안 되어 있어도 숫자와 한글은 잘 나옵니다.
+    // 상태바 투명하게 설정
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      ),
+    );
+
     String todayDate = DateFormat('MM월 dd일').format(DateTime.now());
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
-
-      // ✅ SafeArea: 상태바(배터리, 시간) 영역 침범 방지
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -135,38 +141,37 @@ class _HomeScreenState extends State<HomeScreen> {
                 onRefresh: _fetchTodayData,
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(
-                    20.0,
-                  ), // 여백을 16 -> 20으로 살짝 키움 (더 시원하게)
+                  padding: const EdgeInsets.all(20.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 10), // 상단 여백
-                      // 👋 [타이틀 영역 수정] 날짜 + 제목
+                      const SizedBox(height: 5), // 상단 여백
+                      // 👋 타이틀 영역
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            todayDate, // 1. 날짜 (작고 회색)
+                            todayDate, // 1. 날짜
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w500,
                               color: Colors.grey[600],
                             ),
                           ),
-                          const SizedBox(height: 5), // 날짜와 제목 사이 간격
+                          const SizedBox(height: 5),
                           const Text(
-                            "오늘의 식단", // 2. 메인 제목 (크고 검은색)
+                            "오늘의 식단", // 2. 제목
                             style: TextStyle(
-                              fontSize: 28, // 폰트 사이즈 키움 (24 -> 28)
-                              fontWeight: FontWeight.w800, // 더 두껍게
+                              fontSize: 28,
+                              fontWeight: FontWeight.w800,
                               color: Colors.black,
                             ),
                           ),
                         ],
                       ),
 
-                      const SizedBox(height: 30), // 제목과 카드 사이 간격 넓힘
+                      const SizedBox(height: 30),
+
                       // 🏝️ 1번 섬: 칼로리 섹션
                       _buildSectionCard(
                         child: Column(
@@ -188,8 +193,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
 
-                      const SizedBox(height: 16), // 카드 사이 간격
-                      // 🏝️ 2번 섬: 탄단지 섹션
+                      const SizedBox(height: 16),
+
+                      // 🏝️ 2번 섬: 영양소 상세
                       _buildSectionCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -202,35 +208,21 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             const SizedBox(height: 20),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              children: [
-                                _buildMacroCircle(
-                                  "탄수화물",
-                                  _currentCarbs,
-                                  _targetCarbs,
-                                  Colors.green,
-                                ),
-                                _buildMacroCircle(
-                                  "단백질",
-                                  _currentProtein,
-                                  _targetProtein,
-                                  Colors.blue,
-                                ),
-                                _buildMacroCircle(
-                                  "지방",
-                                  _currentFat,
-                                  _targetFat,
-                                  Colors.orange,
-                                ),
-                              ],
+
+                            // 👇 [변경] 기존 Row 삭제하고 MacroChart 사용
+                            MacroChart(
+                              carbs: _currentCarbs,
+                              targetCarbs: _targetCarbs,
+                              protein: _currentProtein,
+                              targetProtein: _targetProtein,
+                              fat: _currentFat,
+                              targetFat: _targetFat,
                             ),
                           ],
                         ),
                       ),
 
-                      // 스크롤 끝부분 여유 공간
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 50),
                     ],
                   ),
                 ),
@@ -239,116 +231,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 📦 [추가됨] 섹션을 카드 형태로 만들어주는 함수
+  // 📦 카드 UI 위젯
   Widget _buildSectionCard({required Widget child}) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20.0),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20), // 둥근 모서리
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1), // 연한 그림자
+            color: Colors.grey.withOpacity(0.1),
             spreadRadius: 2,
             blurRadius: 10,
-            offset: const Offset(0, 3), // 그림자 위치
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: child,
-    );
-  }
-
-  Widget _buildMacroCircle(
-    String label,
-    double current,
-    double target,
-    Color color,
-  ) {
-    double rawPercentage = (target == 0) ? 0 : (current / target * 100);
-    bool isOver = rawPercentage > 100;
-    double overPercentage = isOver ? rawPercentage - 100 : 0;
-    HSLColor hsl = HSLColor.fromColor(color);
-    Color darkerColor = hsl
-        .withLightness((hsl.lightness * 0.6).clamp(0.0, 1.0))
-        .toColor();
-
-    return Column(
-      children: [
-        SizedBox(
-          width: 80,
-          height: 80,
-          child: Stack(
-            children: [
-              PieChart(
-                PieChartData(
-                  startDegreeOffset: 270,
-                  sectionsSpace: 0,
-                  centerSpaceRadius: 30,
-                  sections: [
-                    PieChartSectionData(
-                      value: isOver ? 100 : rawPercentage,
-                      color: color,
-                      radius: 8,
-                      showTitle: false,
-                    ),
-                    if (!isOver)
-                      PieChartSectionData(
-                        value: 100 - rawPercentage,
-                        color: Colors.grey[200],
-                        radius: 8,
-                        showTitle: false,
-                      ),
-                  ],
-                ),
-              ),
-              if (isOver)
-                PieChart(
-                  PieChartData(
-                    startDegreeOffset: 270,
-                    sectionsSpace: 0,
-                    centerSpaceRadius: 30,
-                    sections: [
-                      PieChartSectionData(
-                        value: overPercentage,
-                        color: darkerColor,
-                        radius: 8,
-                        showTitle: false,
-                      ),
-                      PieChartSectionData(
-                        value: 100 - overPercentage,
-                        color: Colors.transparent,
-                        radius: 8,
-                        showTitle: false,
-                      ),
-                    ],
-                  ),
-                ),
-              Center(
-                child: Text(
-                  "${rawPercentage.toInt()}%",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: isOver ? darkerColor : color,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          "${current.toInt()} / ${target.toInt()}g",
-          style: const TextStyle(color: Colors.grey, fontSize: 12),
-        ),
-      ],
     );
   }
 }
