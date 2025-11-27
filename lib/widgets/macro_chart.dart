@@ -19,12 +19,11 @@ class MacroChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 250,
+      height: 260, // [수정] 3줄이 들어가야 하니 높이를 살짝 더 키움 (250 -> 260)
       child: BarChart(
         BarChartData(
           alignment: BarChartAlignment.spaceAround,
-          maxY: 120, // 100% 기준으로 여유 있게
-          // 툴팁: 터치하면 정확한 g수 보여줌
+          maxY: 120,
           barTouchData: BarTouchData(
             enabled: true,
             touchTooltipData: BarTouchTooltipData(
@@ -53,20 +52,19 @@ class MacroChart extends StatelessWidget {
               },
             ),
           ),
-
           titlesData: FlTitlesData(
             show: true,
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                // [수정 1] 두 줄(이름 + %)이 들어가야 하므로 공간을 더 넉넉하게 잡음 (50 -> 60)
-                reservedSize: 60,
 
-                // [수정 2] 이름 밑에 퍼센트를 같이 보여주는 로직
+                // [수정 1] 글씨 3줄(이름, %, g)이 들어가야 해서 공간을 넉넉히 80으로 늘림
+                reservedSize: 80,
+
                 getTitlesWidget: (double value, TitleMeta meta) {
                   String label = '';
                   double current = 0;
-                  double target = 1; // 0 나누기 방지용
+                  double target = 1;
 
                   switch (value.toInt()) {
                     case 0:
@@ -95,6 +93,7 @@ class MacroChart extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 10),
                     child: Column(
                       children: [
+                        // 1. 이름
                         Text(
                           label,
                           style: const TextStyle(
@@ -103,13 +102,26 @@ class MacroChart extends StatelessWidget {
                             fontSize: 14,
                           ),
                         ),
-                        const SizedBox(height: 4), // 간격
+                        const SizedBox(height: 4),
+
+                        // 2. 퍼센트 (진한 색으로 강조)
                         Text(
-                          '$percent%', // 퍼센트 표시 추가!
+                          '$percent%',
+                          style: const TextStyle(
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w800, // 두껍게
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+
+                        // 3. 그램 (연한 색으로 상세정보)
+                        Text(
+                          '${current.toInt()} / ${target.toInt()}g',
                           style: TextStyle(
-                            color: Colors.grey[600], // 약간 연한 색으로
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
+                            color: Colors.grey[500],
+                            fontWeight: FontWeight.w500,
+                            fontSize: 11,
                           ),
                         ),
                       ],
@@ -140,6 +152,11 @@ class MacroChart extends StatelessWidget {
     );
   }
 
+  double _calculateMaxY() {
+    /* ... 기존 로직 ... */
+    return 120;
+  }
+
   BarChartGroupData _makeBarGroup(
     int x,
     double current,
@@ -159,7 +176,7 @@ class MacroChart extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
           backDrawRodData: BackgroundBarChartRodData(
             show: true,
-            toY: 100, // 목표치 높이 (100%)
+            toY: 100,
             color: Colors.grey[200],
           ),
         ),
