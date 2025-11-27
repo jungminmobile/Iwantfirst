@@ -15,7 +15,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // 기본값 설정
+  // 화면에 표시될 변수들의 기본값 설정
   double _currentCal = 0;
   double _targetCal = 2000;
 
@@ -36,28 +36,40 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchTodayData();
   }
 
-  // 🔥 오늘 데이터 가져오기
+  // 🔥 오늘 데이터 가져오기 (수정된 버전)
   Future<void> _fetchTodayData() async {
+    // isLoading을 다시 true로 설정하여 새로고침 효과를 줍니다.
+    if (!_isLoading) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
+
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
 
     try {
       // 1. 목표 가져오기
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (userDoc.exists && userDoc.data()!.containsKey('goals')) {
-        var goals = userDoc.data()!['goals'];
-        if (mounted) {
-          setState(() {
-            if (goals['target_calories'] != null) _targetCal = (goals['target_calories'] as num).toDouble();
-            // 탄단지 목표 - DB에 있으면 가져오고, 없으면 비율로 계산
-            _targetCarbs = (_targetCal * 0.5) / 4;
-            _targetProtein = (_targetCal * 0.3) / 4;
-            _targetFat = (_targetCal * 0.2) / 9;
-          });
-        }
+        // 'goals' 맵을 안전하게 가져옵니다.
+        final goals = userDoc.data()!['goals'] as Map<String, dynamic>;
+
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★★★ 여기가 핵심 수정 사항입니다: Firestore에서 직접 목표치 가져오기 ★★★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+
+        // num 타입으로 안전하게 가져온 후 double로 변환하고, null일 경우 기본값을 사용합니다.
+        _targetCal = (goals['target_calories'] as num?)?.toDouble() ?? _targetCal;
+        _targetCarbs = (goals['target_carbs'] as num?)?.toDouble() ?? _targetCarbs;
+        _targetProtein = (goals['target_protein'] as num?)?.toDouble() ?? _targetProtein;
+        _targetFat = (goals['target_fat'] as num?)?.toDouble() ?? _targetFat;
       }
 
-      // 2. 오늘 식단 가져오기
+      // 2. 오늘 섭취 기록 가져오기 (기존 코드와 동일)
       String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final mealsSnapshot = await FirebaseFirestore.instance
           .collection('users')
@@ -77,6 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (data['foods'] != null && data['foods'] is List) {
           List<dynamic> foods = data['foods'];
           for (var food in foods) {
+            // 다양한 숫자 타입을 안전하게 double로 변환하는 헬퍼 함수
             double safeParse(dynamic value) {
               if (value == null) return 0.0;
               if (value is num) return value.toDouble();
@@ -91,13 +104,14 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
+      // 3. 모든 데이터가 준비되면 한 번에 setState 호출
       if (mounted) {
         setState(() {
           _currentCal = tempCal;
           _currentCarbs = tempCarbs;
           _currentProtein = tempProtein;
           _currentFat = tempFat;
-          _isLoading = false;
+          _isLoading = false; // 데이터 로딩 완료
         });
       }
 
@@ -107,6 +121,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // --- UI를 구성하는 build 함수 및 _buildMacroCircle 함수는 변경할 필요가 없습니다. ---
+  // --- 따라서 기존 코드를 그대로 사용하시면 됩니다. ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -127,37 +143,41 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. 칼로리 섹션
-            const Text("칼로리 현황", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
+          : RefreshIndicator( // 화면을 아래로 당겨서 새로고침하는 기능 추가
+        onRefresh: _fetchTodayData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(), // 스크롤이 짧아도 항상 당길 수 있도록 설정
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. 칼로리 섹션
+              const Text("칼로리 현황", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
 
-            // 기존 칼로리 차트
-            CalorieChart(
-              current: _currentCal,
-              target: _targetCal,
-            ),
+              // 기존 칼로리 차트
+              CalorieChart(
+                current: _currentCal,
+                target: _targetCal,
+              ),
 
-            const SizedBox(height: 40),
+              const SizedBox(height: 40),
 
-            // 2. 탄단지 섹션
-            const Text("영양소 상세", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
+              // 2. 탄단지 섹션
+              const Text("영양소 상세", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
 
-            // 원형 그래프 3개
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildMacroCircle("탄수화물", _currentCarbs, _targetCarbs, Colors.green),
-                _buildMacroCircle("단백질", _currentProtein, _targetProtein, Colors.blue),
-                _buildMacroCircle("지방", _currentFat, _targetFat, Colors.orange),
-              ],
-            ),
-          ],
+              // 원형 그래프 3개
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildMacroCircle("탄수화물", _currentCarbs, _targetCarbs, Colors.green),
+                  _buildMacroCircle("단백질", _currentProtein, _targetProtein, Colors.blue),
+                  _buildMacroCircle("지방", _currentFat, _targetFat, Colors.orange),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton(
@@ -170,20 +190,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🔥 [수정 완료] 탄단지 원형 그래프 빌더 함수
   Widget _buildMacroCircle(String label, double current, double target, Color color) {
-    // 실제 퍼센트 계산
     double rawPercentage = (target == 0) ? 0 : (current / target * 100);
     bool isOver = rawPercentage > 100;
-
-    // 초과한 퍼센트
     double overPercentage = isOver ? rawPercentage - 100 : 0;
-
-    // --- [수정된 부분] 색상 진하게 만들기 ---
-    // withLightness 안에는 함수가 아니라 숫자가 들어가야 합니다.
     HSLColor hsl = HSLColor.fromColor(color);
     Color darkerColor = hsl.withLightness((hsl.lightness * 0.6).clamp(0.0, 1.0)).toColor();
-    // ------------------------------------
 
     return Column(
       children: [
@@ -192,7 +204,6 @@ class _HomeScreenState extends State<HomeScreen> {
           height: 80,
           child: Stack(
             children: [
-              // 1층 차트: 기본 베이스
               PieChart(
                 PieChartData(
                   startDegreeOffset: 270,
@@ -215,8 +226,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-
-              // 2층 차트: 초과분 표시
               if (isOver)
                 PieChart(
                   PieChartData(
@@ -239,8 +248,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
-
-              // 중앙 텍스트
               Center(
                 child: Text(
                   "${rawPercentage.toInt()}%",
