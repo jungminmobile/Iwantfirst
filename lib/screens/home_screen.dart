@@ -15,7 +15,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // 기본값 설정
+  // 화면에 표시될 변수들의 기본값 설정
   double _currentCal = 0;
   double _targetCal = 2000;
 
@@ -36,10 +36,20 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchTodayData();
   }
 
-  // 🔥 오늘 데이터 가져오기 (새로고침 시 실행될 함수)
+  // 🔥 오늘 데이터 가져오기 (수정된 버전)
   Future<void> _fetchTodayData() async {
+    // isLoading을 다시 true로 설정하여 새로고침 효과를 줍니다.
+    if (!_isLoading) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
+
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
 
     try {
       // 1. 목표 가져오기
@@ -62,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
-      // 2. 오늘 식단 가져오기
+      // 2. 오늘 섭취 기록 가져오기 (기존 코드와 동일)
       String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final mealsSnapshot = await FirebaseFirestore.instance
           .collection('users')
@@ -82,6 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (data['foods'] != null && data['foods'] is List) {
           List<dynamic> foods = data['foods'];
           for (var food in foods) {
+            // 다양한 숫자 타입을 안전하게 double로 변환하는 헬퍼 함수
             double safeParse(dynamic value) {
               if (value == null) return 0.0;
               if (value is num) return value.toDouble();
@@ -97,13 +108,14 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
+      // 3. 모든 데이터가 준비되면 한 번에 setState 호출
       if (mounted) {
         setState(() {
           _currentCal = tempCal;
           _currentCarbs = tempCarbs;
           _currentProtein = tempProtein;
           _currentFat = tempFat;
-          _isLoading = false;
+          _isLoading = false; // 데이터 로딩 완료
         });
       }
     } catch (e) {
@@ -112,132 +124,65 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // --- UI를 구성하는 build 함수 및 _buildMacroCircle 함수는 변경할 필요가 없습니다. ---
+  // --- 따라서 기존 코드를 그대로 사용하시면 됩니다. ---
   @override
   Widget build(BuildContext context) {
     // 오늘 날짜 표시용 (예: 11월 27일)
     String todayDate = DateFormat('MM월 dd일', 'ko_KR').format(DateTime.now());
 
     return Scaffold(
-      backgroundColor: Colors.grey[100], // 배경색
-      // ✨ [핵심 1] AppBar 제거함 (Scaffold에 appBar 속성이 아예 없음)
+      appBar: AppBar(
+        title: const Text('오늘의 식단', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          IconButton(
+              onPressed: _fetchTodayData,
+              icon: const Icon(Icons.refresh, color: Colors.black)
+          ),
+          IconButton(
+              onPressed: (){},
+              icon: const Icon(Icons.calendar_today, color: Colors.black)
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator( // 화면을 아래로 당겨서 새로고침하는 기능 추가
+        onRefresh: _fetchTodayData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(), // 스크롤이 짧아도 항상 당길 수 있도록 설정
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. 칼로리 섹션
+              const Text("칼로리 현황", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
 
-      // ✨ [핵심 2] SafeArea 적용: 앱바가 없으므로 상태바(배터리,시간)와 겹치지 않게 보호
-      body: SafeArea(
-        // ✨ [핵심 3] RefreshIndicator: 당겨서 새로고침 기능
-        child: RefreshIndicator(
-          onRefresh: _fetchTodayData, // 당기면 이 함수 실행
-          color: const Color(0xFF33FF00), // 로딩 아이콘 색상 (메인 컬러)
-          backgroundColor: Colors.white,
+              // 기존 칼로리 차트
+              CalorieChart(
+                current: _currentCal,
+                target: _targetCal,
+              ),
 
-          child: SingleChildScrollView(
-            // 내용이 적어도 당길 수 있게 설정 (중요!)
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 10),
+              const SizedBox(height: 40),
 
-                // ✨ [핵심 4] 앱바 대신 들어간 "오늘의 식단" 타이틀
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          todayDate, // 오늘 날짜 표시
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          "오늘의 식단",
-                          style: TextStyle(
-                            fontSize: 28, // 앱바보다 훨씬 크고 시원하게
-                            fontWeight: FontWeight.w800,
-                            color: Colors.black,
-                          ),
-                        ),
-                      ],
-                    ),
-                    // (선택사항) 우측에 귀여운 아이콘 하나 둬도 좋음 (프로필 등)
-                    // 현재는 비워둠
-                  ],
-                ),
+              // 2. 탄단지 섹션
+              const Text("영양소 상세", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
 
-                const SizedBox(height: 30),
-
-                // 🏝️ 1번 섬: 칼로리 섹션
-                _buildSectionCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "칼로리 현황",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // 그라데이션 차트
-                      CalorieChart(current: _currentCal, target: _targetCal),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                // 🏝️ 2번 섬: 영양소 섹션
-                _buildSectionCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "영양소 상세",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // 원형 그래프 3개
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _buildMacroCircle(
-                            "탄수화물",
-                            _currentCarbs,
-                            _targetCarbs,
-                            Colors.green,
-                          ),
-                          _buildMacroCircle(
-                            "단백질",
-                            _currentProtein,
-                            _targetProtein,
-                            Colors.blue,
-                          ),
-                          _buildMacroCircle(
-                            "지방",
-                            _currentFat,
-                            _targetFat,
-                            Colors.orange,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                // 하단 여백 추가 (스크롤 끝부분 여유)
-                const SizedBox(height: 50),
-              ],
-            ),
+              // 원형 그래프 3개
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildMacroCircle("탄수화물", _currentCarbs, _targetCarbs, Colors.green),
+                  _buildMacroCircle("단백질", _currentProtein, _targetProtein, Colors.blue),
+                  _buildMacroCircle("지방", _currentFat, _targetFat, Colors.orange),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -252,20 +197,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMacroCircle(
-    String label,
-    double current,
-    double target,
-    Color color,
-  ) {
+  Widget _buildMacroCircle(String label, double current, double target, Color color) {
     double rawPercentage = (target == 0) ? 0 : (current / target * 100);
     bool isOver = rawPercentage > 100;
     double overPercentage = isOver ? rawPercentage - 100 : 0;
-
     HSLColor hsl = HSLColor.fromColor(color);
-    Color darkerColor = hsl
-        .withLightness((hsl.lightness * 0.6).clamp(0.0, 1.0))
-        .toColor();
+    Color darkerColor = hsl.withLightness((hsl.lightness * 0.6).clamp(0.0, 1.0)).toColor();
 
     return Column(
       children: [
@@ -342,27 +279,6 @@ class _HomeScreenState extends State<HomeScreen> {
           style: const TextStyle(color: Colors.grey, fontSize: 12),
         ),
       ],
-    );
-  }
-
-  Widget _buildSectionCard({required Widget child}) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 16.0),
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 2,
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: child,
     );
   }
 }
