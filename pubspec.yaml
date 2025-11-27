@@ -63,6 +63,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -109,3 +110,9 @@ flutter:
     - family: Suite
       fonts:
         - asset: lib/assets/fonts/SUITE-Regular.ttf
+
+flutter_launcher_icons:
+  android: "launcher_icon" # 안드로이드 아이콘 이름 설정
+  ios: true # iOS 아이콘 생성 활성화
+  image_path: "lib/assets/icon/icon_jikmuk.png" # 아까 넣어둔 이미지 경로
+  min_sdk_android: 21 # 최신 안드로이드 지원을 위해 권장
