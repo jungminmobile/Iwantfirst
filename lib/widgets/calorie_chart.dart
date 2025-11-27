@@ -24,7 +24,16 @@ class CalorieChart extends StatelessWidget {
               sections: [
                 // 섭취한 칼로리 (색상 표시)
                 PieChartSectionData(
-                  color: Colors.blueAccent,
+                  //color: Colors.blueAccent,
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF33FFFF), // 하늘색 (시작)
+                      Color(0xFF33FF99), // 중간
+                      Color(0xFF33FF00), // 연두색 (끝)
+                    ],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomRight,
+                  ),
                   value: current,
                   title: '',
                   radius: 20,
@@ -46,10 +55,16 @@ class CalorieChart extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('오늘 섭취', style: TextStyle(fontSize: 14, color: Colors.grey)),
+                const Text(
+                  '오늘 섭취',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                ),
                 Text(
                   '${current.toInt()} kcal',
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Text(
                   '/ ${target.toInt()} kcal',

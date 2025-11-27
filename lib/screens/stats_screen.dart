@@ -38,8 +38,6 @@ class _StatsScreenState extends State<StatsScreen> {
   bool _isLoading = true;
   final Map<String, Map<String, double>> _dailyStats = {};
 
-  // ★★★ 동적 X축을 위한 _chartDates 리스트를 제거합니다 ★★★
-
   @override
   void initState() {
     super.initState();
@@ -54,7 +52,7 @@ class _StatsScreenState extends State<StatsScreen> {
     super.dispose();
   }
 
-  // 데이터 가져오기 로직은 기존과 동일
+  // 데이터 가져오기 로직 통합
   Future<void> _fetchMonthlyData() async {
     if (!_isLoading) setState(() => _isLoading = true);
 
@@ -65,15 +63,18 @@ class _StatsScreenState extends State<StatsScreen> {
     }
 
     try {
+      // 1. 목표(Goals) 가져오기 (main 로직 채택: 목표 탄단지까지 DB에서 직접 가져옴)
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (userDoc.exists && userDoc.data()!.containsKey('goals')) {
         final goals = userDoc.data()!['goals'] as Map<String, dynamic>;
         _goalCal = (goals['target_calories'] as num?)?.toDouble() ?? _goalCal;
+        // DB에 저장된 탄단지 목표를 사용
         _goalCarbs = (goals['target_carbs'] as num?)?.toDouble() ?? _goalCarbs;
         _goalProtein = (goals['target_protein'] as num?)?.toDouble() ?? _goalProtein;
         _goalFat = (goals['target_fat'] as num?)?.toDouble() ?? _goalFat;
       }
 
+      // 2. 식단 데이터 가져오기 (main 로직 채택: collectionGroup + 보안 필터링)
       final snapshot = await FirebaseFirestore.instance.collectionGroup('meals').where(
           FieldPath.documentId,
           isGreaterThanOrEqualTo: FirebaseFirestore.instance.collection('users').doc(user.uid).path
@@ -92,8 +93,10 @@ class _StatsScreenState extends State<StatsScreen> {
         double totalCal = 0, totalCarbs = 0, totalProtein = 0, totalFat = 0;
 
         if (data['foods'] != null && data['foods'] is List) {
+          // main 로직 채택: 간결한 safeParse 함수 정의 사용
+          double safeParse(dynamic v) => (v is num) ? v.toDouble() : (double.tryParse(v.toString()) ?? 0.0);
+          
           for (var food in (data['foods'] as List)) {
-            double safeParse(dynamic v) => (v is num) ? v.toDouble() : (double.tryParse(v.toString()) ?? 0.0);
             totalCal += safeParse(food['calories']);
             totalCarbs += safeParse(food['carbs']);
             totalProtein += safeParse(food['protein']);
@@ -101,6 +104,7 @@ class _StatsScreenState extends State<StatsScreen> {
           }
         }
 
+        // main 로직 채택: Map.update를 사용하여 효율적으로 데이터 누적
         tempStats.update(dateStr, (value) {
           value['cal'] = (value['cal'] ?? 0) + totalCal;
           value['carbs'] = (value['carbs'] ?? 0) + totalCarbs;
@@ -132,27 +136,29 @@ class _StatsScreenState extends State<StatsScreen> {
         title: const Text('식단 통계'),
         centerTitle: true,
         actions: [
+          // main 로직 채택: 간결한 한 줄 표현
           IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchMonthlyData)
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-        controller: _scrollController,
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            _buildChartSection(),
-            const SizedBox(height: 20),
-            const Divider(thickness: 8, color: Color(0xFFF5F5F5)),
-            const SizedBox(height: 10),
-            _buildCalendarSection(),
-            const SizedBox(height: 20),
-            _buildSelectedDayStats(),
-            const SizedBox(height: 40),
-          ],
-        ),
-      ),
+            // main 로직 채택: controller 유지
+            controller: _scrollController,
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  _buildChartSection(),
+                  const SizedBox(height: 20),
+                  const Divider(thickness: 8, color: Color(0xFFF5F5F5)),
+                  const SizedBox(height: 10),
+                  _buildCalendarSection(),
+                  const SizedBox(height: 20),
+                  _buildSelectedDayStats(),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
     );
   }
 
@@ -165,8 +171,14 @@ class _StatsScreenState extends State<StatsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('최근 7일 달성률 (%)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              Text('목표: ${_goalCal.toInt()} kcal', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              const Text(
+                '최근 7일 달성률 (%)',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                '목표: ${_goalCal.toInt()} kcal',
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
             ],
           ),
           const SizedBox(height: 15),
@@ -201,15 +213,13 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   LineChartData _buildLineChartData() {
-    // _chartDates.clear()를 제거합니다.
-
     return LineChartData(
       lineTouchData: LineTouchData(
         touchTooltipData: LineTouchTooltipData(
           fitInsideHorizontally: true,
           fitInsideVertically: true,
+          // main 로직 채택: 툴팁에 날짜 정보를 포함하여 가독성 개선
           getTooltipItems: (spots) => spots.map((spot) {
-            // ★★★ 툴팁의 날짜도 고정된 X축 인덱스로 계산합니다.
             final date = DateTime.now().subtract(Duration(days: 6 - spot.x.toInt()));
             final dateKey = _formatDate(date);
             final dailyData = _dailyStats[dateKey];
@@ -243,24 +253,31 @@ class _StatsScreenState extends State<StatsScreen> {
           HorizontalLine(y: 100, color: Colors.black54, strokeWidth: 1, dashArray: [5, 5],
             label: HorizontalLineLabel(show: true, alignment: Alignment.topRight,
               padding: const EdgeInsets.only(right: 5, bottom: 5),
-              style: const TextStyle(color: Colors.black54, fontSize: 10, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: Colors.black54,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
               labelResolver: (line) => 'Goal 100%',
             ),
           ),
         ],
       ),
       lineBarsData: [
-        if (_chartVisibility['cal']!) _buildLine(Colors.redAccent, 'cal', _goalCal),
-        if (_chartVisibility['carbs']!) _buildLine(Colors.green, 'carbs', _goalCarbs),
-        if (_chartVisibility['protein']!) _buildLine(Colors.blue, 'protein', _goalProtein),
-        if (_chartVisibility['fat']!) _buildLine(Colors.orange, 'fat', _goalFat),
+        if (_chartVisibility['cal']!)
+          _buildLine(Colors.redAccent, 'cal', _goalCal),
+        if (_chartVisibility['carbs']!)
+          _buildLine(Colors.green, 'carbs', _goalCarbs),
+        if (_chartVisibility['protein']!)
+          _buildLine(Colors.blue, 'protein', _goalProtein),
+        if (_chartVisibility['fat']!)
+          _buildLine(Colors.orange, 'fat', _goalFat),
       ],
       minY: 0,
       maxY: 160,
     );
   }
 
-  // isStepLineChart 관련 속성을 제거하고 기본 LineChartBarData로 복원
   LineChartBarData _buildLine(Color color, String key, double goal) {
     return LineChartBarData(
       spots: _getPercentageSpots(key, goal),
@@ -268,11 +285,21 @@ class _StatsScreenState extends State<StatsScreen> {
       color: color,
       barWidth: 3,
       isStrokeCapRound: true,
-      dotData: FlDotData(show: true),
+      // yunho 로직 채택: 커스텀 점 스타일 적용
+      dotData: FlDotData(
+        show: true,
+        getDotPainter: (spot, percent, barData, index) {
+          return FlDotCirclePainter(
+            radius: 3,
+            color: Colors.white,
+            strokeWidth: 2,
+            strokeColor: color,
+          );
+        },
+      ),
     );
   }
 
-  // ★★★ 기록이 있는 날의 데이터만 spots 리스트에 추가하는 로직은 그대로 유지 ★★★
   List<FlSpot> _getPercentageSpots(String key, double goal) {
     List<FlSpot> spots = [];
     for (int i = 0; i < 7; i++) {
@@ -293,7 +320,7 @@ class _StatsScreenState extends State<StatsScreen> {
     return spots;
   }
 
-  // ★★★ 핵심 수정: 하단 타이틀이 항상 7일 전체를 표시하도록 수정 ★★★
+  // X축 타이틀 로직 통합 (동일)
   FlTitlesData _buildTitles() {
     return FlTitlesData(
       bottomTitles: AxisTitles(
@@ -318,7 +345,10 @@ class _StatsScreenState extends State<StatsScreen> {
         sideTitles: SideTitles(showTitles: true, reservedSize: 40, interval: 50,
           getTitlesWidget: (value, meta) {
             if (value == 0) return const SizedBox.shrink();
-            return Text('${value.toInt()}%', style: const TextStyle(color: Colors.grey, fontSize: 10));
+            return Text(
+              '${value.toInt()}%',
+              style: const TextStyle(color: Colors.grey, fontSize: 10),
+            );
           },
         ),
       ),
@@ -345,11 +375,22 @@ class _StatsScreenState extends State<StatsScreen> {
             _selectedDay = selectedDay;
             _focusedDay = focusedDay;
           }),
+          // yunho 로직 채택: 캘린더 색상 스타일
           calendarStyle: const CalendarStyle(
-            todayDecoration: BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
-            selectedDecoration: BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
-            markerDecoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+            todayDecoration: BoxDecoration(
+              color: Color(0xFF33CC80),
+              shape: BoxShape.circle,
+            ),
+            selectedDecoration: BoxDecoration(
+              color: Color(0xFF33CCFF),
+              shape: BoxShape.circle,
+            ),
+            markerDecoration: BoxDecoration(
+              color: Colors.orange,
+              shape: BoxShape.circle,
+            ),
           ),
+          // main 로직 채택: eventLoader 추가
           headerStyle: const HeaderStyle(formatButtonVisible: false, titleCentered: true),
           eventLoader: (day) => _dailyStats.containsKey(_formatDate(day)) ? ['data'] : [],
         ),
@@ -367,29 +408,61 @@ class _StatsScreenState extends State<StatsScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5))],
+          // yunho 로직 채택: BoxShadow 스타일
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
           border: Border.all(color: Colors.grey.shade200),
         ),
         child: Column(
           children: [
-            Text(DateFormat('M월 d일 (E)', 'ko_KR').format(_selectedDay ?? DateTime.now()),
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              DateFormat(
+                'M월 d일 (E)',
+                'ko_KR',
+              ).format(_selectedDay ?? DateTime.now()),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 15),
             if (data != null) ...[
-              _buildStatRow('총 섭취 칼로리', '${data['cal']!.toInt()} kcal', Colors.black, true),
+              _buildStatRow(
+                '총 섭취 칼로리',
+                '${data['cal']!.toInt()} kcal',
+                Colors.black,
+                true,
+              ),
               const Divider(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildMacroItem('탄수화물', '${data['carbs']!.toInt()}g', Colors.green),
-                  _buildMacroItem('단백질', '${data['protein']!.toInt()}g', Colors.blue),
-                  _buildMacroItem('지방', '${data['fat']!.toInt()}g', Colors.orange),
+                  _buildMacroItem(
+                    '탄수화물',
+                    '${data['carbs']!.toInt()}g',
+                    Colors.green,
+                  ),
+                  _buildMacroItem(
+                    '단백질',
+                    '${data['protein']!.toInt()}g',
+                    Colors.blue,
+                  ),
+                  _buildMacroItem(
+                    '지방',
+                    '${data['fat']!.toInt()}g',
+                    Colors.orange,
+                  ),
                 ],
               ),
             ] else
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
-                child: Text('기록된 식단이 없습니다.', style: TextStyle(color: Colors.grey)),
+                child: Text(
+                  '기록된 식단이 없습니다.',
+                  style: TextStyle(color: Colors.grey),
+                ),
               ),
           ],
         ),
@@ -412,7 +485,14 @@ class _StatsScreenState extends State<StatsScreen> {
       children: [
         Text(label, style: const TextStyle(fontSize: 14, color: Colors.grey)),
         const SizedBox(height: 4),
-        Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
       ],
     );
   }

@@ -31,7 +31,6 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       // 로그인 성공 시 StreamBuilder가 HomePage로 자동 전환하므로 Navigator는 필요 없습니다.
-
     } on FirebaseAuthException catch (e) {
       String message = '';
       if (e.code == 'user-not-found' || e.code == 'wrong-password') {
@@ -41,35 +40,35 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('로그인 실패: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('로그인 실패: $e')));
       }
     } finally {
-      if(mounted){
-      setState(() {
-        _isLoading = false;
-      });
-    }
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
-  @override
 
+  @override
   void dispose() {
     _emailController.dispose(); // 👈 이메일 컨트롤러 해제
     _passwordController.dispose(); // 👈 비밀번호 컨트롤러 해제
     //print("정리");
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       appBar: AppBar(title: const Text('로그인')),
       body: Center(
@@ -97,7 +96,7 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: _isLoading ? null : _signIn,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 15),
-                    backgroundColor: Colors.blue,
+                    backgroundColor: const Color(0xFF33CC99),
                     foregroundColor: Colors.white,
                   ),
                   child: _isLoading

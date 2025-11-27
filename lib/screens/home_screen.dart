@@ -53,20 +53,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       // 1. 목표 가져오기
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
       if (userDoc.exists && userDoc.data()!.containsKey('goals')) {
-        // 'goals' 맵을 안전하게 가져옵니다.
-        final goals = userDoc.data()!['goals'] as Map<String, dynamic>;
-
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★★★ 여기가 핵심 수정 사항입니다: Firestore에서 직접 목표치 가져오기 ★★★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-
-        // num 타입으로 안전하게 가져온 후 double로 변환하고, null일 경우 기본값을 사용합니다.
-        _targetCal = (goals['target_calories'] as num?)?.toDouble() ?? _targetCal;
-        _targetCarbs = (goals['target_carbs'] as num?)?.toDouble() ?? _targetCarbs;
-        _targetProtein = (goals['target_protein'] as num?)?.toDouble() ?? _targetProtein;
-        _targetFat = (goals['target_fat'] as num?)?.toDouble() ?? _targetFat;
+        var goals = userDoc.data()!['goals'];
+        if (mounted) {
+          setState(() {
+            if (goals['target_calories'] != null) {
+              _targetCal = (goals['target_calories'] as num).toDouble();
+            }
+            // 탄단지 목표 - DB에 있으면 가져오고, 없으면 비율로 계산
+            _targetCarbs = (_targetCal * 0.5) / 4;
+            _targetProtein = (_targetCal * 0.3) / 4;
+            _targetFat = (_targetCal * 0.2) / 9;
+          });
+        }
       }
 
       // 2. 오늘 섭취 기록 가져오기 (기존 코드와 동일)
@@ -96,6 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
               if (value is String) return double.tryParse(value) ?? 0.0;
               return 0.0;
             }
+
             tempCal += safeParse(food['calories']);
             tempCarbs += safeParse(food['carbs']);
             tempProtein += safeParse(food['protein']);
@@ -114,7 +118,6 @@ class _HomeScreenState extends State<HomeScreen> {
           _isLoading = false; // 데이터 로딩 완료
         });
       }
-
     } catch (e) {
       print("❌ 홈 데이터 불러오기 실패: $e");
       if (mounted) setState(() => _isLoading = false);
@@ -125,6 +128,9 @@ class _HomeScreenState extends State<HomeScreen> {
   // --- 따라서 기존 코드를 그대로 사용하시면 됩니다. ---
   @override
   Widget build(BuildContext context) {
+    // 오늘 날짜 표시용 (예: 11월 27일)
+    String todayDate = DateFormat('MM월 dd일', 'ko_KR').format(DateTime.now());
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('오늘의 식단', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -184,7 +190,8 @@ class _HomeScreenState extends State<HomeScreen> {
         onPressed: () {
           print("식단 입력 버튼 클릭됨");
         },
-        backgroundColor: Colors.blue,
+        backgroundColor: const Color(0xFF33FF00),
+        foregroundColor: Colors.black,
         child: const Icon(Icons.add),
       ),
     );
@@ -262,7 +269,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
         const SizedBox(height: 4),
         Text(
           "${current.toInt()} / ${target.toInt()}g",
