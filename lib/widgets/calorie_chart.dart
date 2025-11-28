@@ -11,11 +11,9 @@ class CalorieChart extends StatelessWidget {
   Widget build(BuildContext context) {
     double percentage = (target == 0) ? 0 : current / target;
 
-    // [수정 1] 상단 여백 추가: '칼로리 현황' 텍스트와 겹치지 않도록 Padding으로 감쌌습니다.
     return Padding(
       padding: const EdgeInsets.only(top: 30.0),
       child: SizedBox(
-        // [수정 2] 높이 증가: 그래프 전체 크기를 키우기 위해 높이를 늘렸습니다. (150 -> 220)
         height: 220,
         child: Stack(
           alignment: Alignment.bottomCenter,
@@ -24,32 +22,28 @@ class CalorieChart extends StatelessWidget {
               PieChartData(
                 startDegreeOffset: 180,
                 pieTouchData: PieTouchData(enabled: false),
-                // [수정 3] 중앙 공간 조절: 그래프가 두꺼워진 만큼 중앙 빈 공간을 살짝 줄였습니다. (80 -> 70)
                 centerSpaceRadius: 70,
                 sectionsSpace: 0,
                 sections: [
-                  // 1. 섭취량 섹션
+                  // 1. 데이터 섹션
                   PieChartSectionData(
                     value: _getChartValue(percentage),
                     color: Colors.transparent,
-                    // [수정 4] 두께 증가: radius 값을 키워 그래프를 두껍게 만들었습니다. (25 -> 40)
                     radius: 40,
                     showTitle: false,
-                    gradient: _getDynamicGradient(percentage),
+                    gradient: _getDynamicGradient(percentage), // 🔥 여기가 핵심
                   ),
                   // 2. 남은 목표 섹션
                   PieChartSectionData(
                     value: _getRemainingValue(percentage),
                     color: Colors.grey[200],
-                    // [수정 4] 두께 증가: (25 -> 40)
                     radius: 40,
                     showTitle: false,
                   ),
-                  // 3. 투명 섹션 (반원 만들기용)
+                  // 3. 투명 섹션
                   PieChartSectionData(
                     value: 100,
                     color: Colors.transparent,
-                    // [수정 4] 두께 증가: (25 -> 40)
                     radius: 40,
                     showTitle: false,
                   ),
@@ -59,7 +53,6 @@ class CalorieChart extends StatelessWidget {
 
             // 중앙 텍스트
             Padding(
-              // [수정 5] 텍스트 위치 조정: 그래프가 커진 만큼 텍스트 위치도 아래로 조정했습니다.
               padding: const EdgeInsets.only(bottom: 35),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -71,7 +64,6 @@ class CalorieChart extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     '${current.toInt()} kcal',
-                    // [수정 6] 폰트 크기 증가: 그래프에 맞춰 글씨도 키웠습니다.
                     style: const TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
@@ -90,7 +82,6 @@ class CalorieChart extends StatelessWidget {
     );
   }
 
-  // (아래 메서드들은 기존과 동일합니다)
   double _getChartValue(double percentage) {
     if (percentage > 1.0) return 100.0;
     return percentage * 100;
@@ -101,17 +92,67 @@ class CalorieChart extends StatelessWidget {
     return 100 - (percentage * 100);
   }
 
+  // 🔥 [최종] 3단계 그라데이션 로직
   Gradient _getDynamicGradient(double percentage) {
-    List<Color> colors;
-    if (percentage <= 1.0) {
-      colors = [const Color(0xFF33CCFF), const Color(0xFF33CC00)];
-    } else {
-      colors = [const Color(0xFF33CC00), Colors.red];
+    // ✅ 1단계: 0% ~ 80% (원하시던 파랑->초록 그라데이션 유지)
+    if (percentage < 0.8) {
+      return const LinearGradient(
+        colors: [Color(0xFF33CCFF), Color(0xFF33CC00)], // 파랑 -> 초록
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+      );
     }
-    return LinearGradient(
-      colors: colors,
-      begin: Alignment.centerLeft,
-      end: Alignment.centerRight,
-    );
+    // ✅ 2단계: 80% ~ 100% (오른쪽에서 초록색 덩어리가 밀고 들어옴)
+    else if (percentage <= 1.0) {
+      double progress = (percentage - 0.8) / 0.2; // 0.0 ~ 1.0 진행률
+      double splitPoint = 1.0 - progress; // 오른쪽에서 왼쪽으로 이동
+
+      return LinearGradient(
+        colors: const [
+          Color(0xFF33CCFF), // 왼쪽: 파랑 (기존 그라데이션 시작)
+          Color(0xFF33CC00), // 중간: 초록 (기존 그라데이션 끝)
+          Color(0xFF33CC00), // 중간: 단색 초록 시작
+          Color(0xFF33CC00), // 오른쪽: 단색 초록
+        ],
+        stops: [
+          0.0,
+          (splitPoint - 0.1).clamp(0.0, 1.0), // 기존 그라데이션이 밀려나는 지점
+          (splitPoint + 0.1).clamp(0.0, 1.0), // 단색 초록이 시작되는 지점
+          1.0,
+        ],
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+      );
+    }
+    // ✅ 3단계: 200% 이상 (완전 빨강)
+    else if (percentage >= 2.0) {
+      return const LinearGradient(
+        colors: [Colors.red, Colors.red],
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+      );
+    }
+    // ✅ 4단계: 100% ~ 200% (오른쪽에서 빨간색 덩어리가 밀고 들어옴)
+    else {
+      double progress = percentage - 1.0;
+      double splitPoint = 1.0 - progress;
+
+      return LinearGradient(
+        colors: const [
+          Color(0xFF33CC00), // 왼쪽: 초록
+          Color(0xFF33CC00), // 중간: 초록
+          Colors.red, // 중간: 빨강
+          Colors.red, // 오른쪽: 빨강
+        ],
+        stops: [
+          0.0,
+          (splitPoint - 0.15).clamp(0.0, 1.0), // 부드러운 경계선
+          (splitPoint + 0.15).clamp(0.0, 1.0),
+          1.0,
+        ],
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+      );
+    }
   }
 }

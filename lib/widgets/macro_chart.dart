@@ -19,7 +19,7 @@ class MacroChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 260, // [수정] 3줄이 들어가야 하니 높이를 살짝 더 키움 (250 -> 260)
+      height: 260,
       child: BarChart(
         BarChartData(
           alignment: BarChartAlignment.spaceAround,
@@ -57,10 +57,7 @@ class MacroChart extends StatelessWidget {
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-
-                // [수정 1] 글씨 3줄(이름, %, g)이 들어가야 해서 공간을 넉넉히 80으로 늘림
                 reservedSize: 80,
-
                 getTitlesWidget: (double value, TitleMeta meta) {
                   String label = '';
                   double current = 0;
@@ -84,7 +81,6 @@ class MacroChart extends StatelessWidget {
                       break;
                   }
 
-                  // 퍼센트 계산
                   int percent = (target == 0)
                       ? 0
                       : (current / target * 100).toInt();
@@ -93,7 +89,6 @@ class MacroChart extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 10),
                     child: Column(
                       children: [
-                        // 1. 이름
                         Text(
                           label,
                           style: const TextStyle(
@@ -103,19 +98,15 @@ class MacroChart extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 4),
-
-                        // 2. 퍼센트 (진한 색으로 강조)
                         Text(
                           '$percent%',
                           style: const TextStyle(
                             color: Colors.black87,
-                            fontWeight: FontWeight.w800, // 두껍게
+                            fontWeight: FontWeight.w800,
                             fontSize: 13,
                           ),
                         ),
                         const SizedBox(height: 2),
-
-                        // 3. 그램 (연한 색으로 상세정보)
                         Text(
                           '${current.toInt()} / ${target.toInt()}g',
                           style: TextStyle(
@@ -153,7 +144,6 @@ class MacroChart extends StatelessWidget {
   }
 
   double _calculateMaxY() {
-    /* ... 기존 로직 ... */
     return 120;
   }
 
@@ -163,15 +153,58 @@ class MacroChart extends StatelessWidget {
     double target,
     Color color,
   ) {
+    // 1. 퍼센트 계산
     double percentage = (target == 0) ? 0 : (current / target * 100);
-    if (percentage > 120) percentage = 120;
+
+    // 2. 높이 제한
+    double barHeight = (percentage > 100) ? 100 : percentage;
+
+    // 3. 색상 로직 (빨간색이 아래에서 차오름)
+    Gradient? barGradient;
+
+    if (percentage <= 100) {
+      // 100% 이하는 단색 (원래 색)
+      barGradient = null;
+    } else if (percentage >= 200) {
+      // 200% 이상은 전체 빨강
+      barGradient = const LinearGradient(
+        colors: [Colors.red, Colors.red],
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+      );
+    } else {
+      // 🔥 100% ~ 200% 구간: 빨간색 게이지가 바닥부터 차오름
+      // redRatio: 0.0(100%일 때) ~ 1.0(200%일 때)
+      double redRatio = (percentage - 100) / 100;
+
+      barGradient = LinearGradient(
+        // 색상 배치: [빨강, 빨강, 원래색, 원래색]
+        // 이렇게 같은 색을 반복해서 배치하면 그라데이션 없이 딱 잘린 색이 나옵니다.
+        colors: [
+          Colors.red, // 바닥
+          Colors.red, // 빨간색 끝나는 지점
+          color, // 원래색 시작 지점
+          color, // 꼭대기
+        ],
+        stops: [
+          0.0,
+          redRatio, // 여기까지 빨간색
+          redRatio, // 여기서부터 원래 색 (경계선이 칼같이 나뉨)
+          1.0,
+        ],
+        begin: Alignment.bottomCenter, // 아래에서
+        end: Alignment.topCenter, // 위로
+      );
+    }
 
     return BarChartGroupData(
       x: x,
       barRods: [
         BarChartRodData(
-          toY: percentage,
-          color: color,
+          toY: barHeight,
+          // 그라데이션이 있으면 사용, 없으면 단색 사용
+          color: barGradient == null ? color : null,
+          gradient: barGradient,
           width: 20,
           borderRadius: BorderRadius.circular(4),
           backDrawRodData: BackgroundBarChartRodData(
