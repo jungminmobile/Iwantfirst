@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:focus_detector/focus_detector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'edit_food_screen.dart';
 import '../services/gemini_service.dart';
 import '../services/database_service.dart';
@@ -21,6 +24,9 @@ class _CameraScreenState extends State<CameraScreen> {
 
   bool _isAnalyzing = false;
   Map<String, dynamic> _savedMeals = {};
+
+  // 수정 모드인지 확인하는 상태 변수 (DB 삭제 없이 UI만 변경하기 위함)
+  final Map<String, bool> _isEditingMode = {};
 
   List<XFile> _breakfastImages = [];
   List<XFile> _lunchImages = [];
@@ -73,6 +79,8 @@ class _CameraScreenState extends State<CameraScreen> {
     if (mounted) {
       setState(() {
         _savedMeals = data;
+        // 데이터를 새로 불러오면 수정 모드는 해제 (보기 모드로)
+        _isEditingMode.clear();
       });
     }
   }
@@ -126,7 +134,7 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _onDateChanged(int index) async {
-    await _saveTempData();
+    // 날짜 변경 시 현재 작업 중이던(저장 안 한) 내용은 버리고, 새 날짜의 저장된 데이터를 불러옴
     setState(() {
       _selectedDate = _weekDates[index];
       _breakfastImages = [];
@@ -138,6 +146,7 @@ class _CameraScreenState extends State<CameraScreen> {
       _snackImages = [];
       _snackTexts = [];
       _savedMeals = {};
+      _isEditingMode.clear();
     });
     await _loadTempData();
     await _fetchFirebaseData();
@@ -151,7 +160,33 @@ class _CameraScreenState extends State<CameraScreen> {
       setState(() {
         _breakfastImages.add(file);
       });
-      _saveTempData();
+      // _saveTempData(); // 자동 저장 제거
+    }
+  }
+
+  // 🔥 Firestore 데이터 삭제 함수 (초기화 버튼을 눌렀을 때만 사용)
+  Future<void> _deleteMealFromDB(String mealType) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    String dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('daily_logs')
+          .doc(dateStr)
+          .collection('meals')
+          .doc(mealType)
+          .delete();
+
+      if (mounted) {
+        setState(() {
+          _savedMeals.remove(mealType);
+          _isEditingMode[mealType] = false;
+        });
+      }
+    } catch (e) {
+      print("DB 삭제 실패: $e");
     }
   }
 
@@ -179,7 +214,8 @@ class _CameraScreenState extends State<CameraScreen> {
               break;
           }
         });
-        _saveTempData();
+        // _saveTempData(); // 자동 저장 제거 (분석 안 누르면 날아가게)
+        // DB 삭제 로직 제거 (정정 버튼 누를 때만 삭제)
       }
     } catch (e) {
       print('사진 선택 실패: $e');
@@ -225,7 +261,7 @@ class _CameraScreenState extends State<CameraScreen> {
                         break;
                     }
                   });
-                  _saveTempData();
+                  // _saveTempData(); // 자동 저장 제거
                 }
                 Navigator.pop(context);
               },
@@ -254,7 +290,7 @@ class _CameraScreenState extends State<CameraScreen> {
           break;
       }
     });
-    _saveTempData();
+    // _saveTempData(); // 자동 저장 제거
   }
 
   void _removeImage(String mealType, XFile image) {
@@ -274,7 +310,63 @@ class _CameraScreenState extends State<CameraScreen> {
           break;
       }
     });
-    _saveTempData();
+    // _saveTempData(); // 자동 저장 제거
+  }
+
+  // 수정 버튼 누르면 -> 화면만 입력 폼으로 바꿈
+  void _onModifyPressed(String mealType) {
+    setState(() {
+      _isEditingMode[mealType] = true;
+    });
+  }
+
+  // 🔥 [초기화 버튼] 누르면 -> 로컬 싹 지우고 + DB 데이터도 날림
+  void _onCorrectionPressed(String mealType) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('정말 초기화하시겠습니까?'),
+        content: const Text('입력된 사진과 기존 저장된 데이터가 모두 삭제됩니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // 다이얼로그 닫기
+
+              // 1. 로컬 데이터 초기화
+              setState(() {
+                switch (mealType) {
+                  case '아침':
+                    _breakfastImages.clear();
+                    _breakfastTexts.clear();
+                    break;
+                  case '점심':
+                    _lunchImages.clear();
+                    _lunchTexts.clear();
+                    break;
+                  case '저녁':
+                    _dinnerImages.clear();
+                    _dinnerTexts.clear();
+                    break;
+                  case '간식':
+                    _snackImages.clear();
+                    _snackTexts.clear();
+                    break;
+                }
+              });
+              _saveTempData();
+
+              // 2. DB 데이터 삭제 (실제 초기화)
+              _deleteMealFromDB(mealType);
+            },
+            child: const Text('초기화', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _onAnalyzePressed(String mealType) async {
@@ -299,12 +391,7 @@ class _CameraScreenState extends State<CameraScreen> {
         break;
     }
 
-    if (targetImages.isEmpty && targetTexts.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('분석할 사진이나 텍스트가 없습니다.')));
-      return;
-    }
+    if (targetImages.isEmpty && targetTexts.isEmpty) return;
 
     setState(() {
       _isAnalyzing = true;
@@ -333,7 +420,16 @@ class _CameraScreenState extends State<CameraScreen> {
           ),
         );
         if (result == true) {
+          // 저장이 완료되었을 때만 DB를 다시 불러오고, 임시 사진을 정리함
           _fetchFirebaseData();
+          setState(() {
+            _isEditingMode[mealType] = false; // 수정 모드 종료
+            // 🔥 분석 완료 후에도 사진과 텍스트를 유지하고 싶으면 아래 부분을 주석 처리하세요.
+            // 🔥 현재는 "저장됨" 상태가 되면 UI가 요약 카드로 바뀌므로 입력 폼의 데이터를 굳이 남길 필요가 없어 보이지만,
+            // 🔥 "다시 수정"을 눌렀을 때 이전 사진이 남아있길 원한다면 아래 clear() 부분을 삭제하세요.
+            // 여기서는 "저장 완료 시 로컬 입력 데이터는 클리어하지 않음"으로 설정하여 수정 시 다시 보이게 합니다.
+            _saveTempData();
+          });
         }
       } else {
         throw Exception('음식을 식별하지 못했습니다.');
@@ -350,16 +446,10 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  void _onModifyPressed(String mealType) {
-    setState(() {
-      _savedMeals.remove(mealType);
-    });
-  }
-
   Widget _buildDateSelector() {
     return Container(
       height: 60,
-      color: Colors.grey[200], // 상단 날짜 배경색
+      color: Colors.grey[200],
       padding: const EdgeInsets.only(left: 10, right: 10, top: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -368,7 +458,6 @@ class _CameraScreenState extends State<CameraScreen> {
           final isSelected =
               DateFormat('yyyy-MM-dd').format(date) ==
               DateFormat('yyyy-MM-dd').format(_selectedDate);
-
           Widget tabContent = Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -398,12 +487,9 @@ class _CameraScreenState extends State<CameraScreen> {
               ),
             ],
           );
-
           return Expanded(
             child: GestureDetector(
-              onTap: () {
-                _pageController.jumpToPage(index);
-              },
+              onTap: () => _pageController.jumpToPage(index),
               child: isSelected
                   ? Stack(
                       clipBehavior: Clip.none,
@@ -412,7 +498,7 @@ class _CameraScreenState extends State<CameraScreen> {
                         Container(
                           margin: const EdgeInsets.symmetric(horizontal: 2),
                           decoration: const BoxDecoration(
-                            color: Color(0xFFF5F5F5), // 선택된 탭 배경 (body 색과 동일하게)
+                            color: Color(0xFFF5F5F5),
                             borderRadius: BorderRadius.vertical(
                               top: Radius.circular(10),
                             ),
@@ -492,19 +578,17 @@ class _CameraScreenState extends State<CameraScreen> {
                 ),
               ],
               body: Container(
-                color: const Color(0xFFF5F5F5), // 🟢 [수정] 배경색을 연한 회색으로 변경
+                color: const Color(0xFFF5F5F5),
                 child: PageView.builder(
                   controller: _pageController,
                   itemCount: 7,
-                  onPageChanged: (index) {
-                    _onDateChanged(index);
-                  },
+                  onPageChanged: (index) => _onDateChanged(index),
                   itemBuilder: (context, index) {
                     return SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 10,
-                      ), // 🟢 [수정] 좌우 여백 추가
+                      ),
                       child: Column(
                         children: [
                           const SizedBox(height: 10),
@@ -513,7 +597,7 @@ class _CameraScreenState extends State<CameraScreen> {
                             _breakfastImages,
                             _breakfastTexts,
                           ),
-                          const SizedBox(height: 16), // 카드 간격
+                          const SizedBox(height: 16),
                           _buildMealSection('점심', _lunchImages, _lunchTexts),
                           const SizedBox(height: 16),
                           _buildMealSection('저녁', _dinnerImages, _dinnerTexts),
@@ -550,75 +634,102 @@ class _CameraScreenState extends State<CameraScreen> {
     );
   }
 
-  // 🟢 [수정됨] 식사 섹션을 카드 형태로 변경
   Widget _buildMealSection(
     String title,
     List<XFile> images,
     List<String> textItems,
   ) {
     bool isSaved = _savedMeals.containsKey(title);
-    Map<String, dynamic>? savedData = isSaved ? _savedMeals[title] : null;
+    bool isEditing = _isEditingMode[title] ?? false;
 
-    return Container(
-      padding: const EdgeInsets.all(20), // 내부 여백 넉넉하게
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white, // 흰색 카드
-        borderRadius: BorderRadius.circular(20), // 둥근 모서리
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1), // 연한 그림자
-            spreadRadius: 2,
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+    if (isSaved && !isEditing) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 2,
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              isSaved
-                  ? TextButton.icon(
-                      onPressed: () => _onModifyPressed(title),
-                      icon: const Icon(
-                        Icons.edit,
-                        size: 12,
-                        color: Colors.grey,
-                      ),
-                      label: const Text(
-                        '수정',
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                    )
-                  : Flexible(
-                      child: ExpandableFab(
-                        onCameraTap: () =>
-                            _pickImage(title, ImageSource.camera),
-                        onGalleryTap: () =>
-                            _pickImage(title, ImageSource.gallery),
-                        onTextTap: () => _showTextInputDialog(title),
-                      ),
-                    ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (isSaved && savedData != null)
-            _buildSummaryCard(savedData)
-          else
+                TextButton.icon(
+                  onPressed: () => _onModifyPressed(title),
+                  icon: const Icon(Icons.edit, size: 12, color: Colors.grey),
+                  label: const Text(
+                    '수정',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _buildSummaryCard(_savedMeals[title]),
+          ],
+        ),
+      );
+    } else {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 2,
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Flexible(
+                  child: ExpandableFab(
+                    onCameraTap: () => _pickImage(title, ImageSource.camera),
+                    onGalleryTap: () => _pickImage(title, ImageSource.gallery),
+                    onTextTap: () => _showTextInputDialog(title),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
             _buildInputForm(title, images, textItems),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
+    }
   }
 
   Widget _buildSummaryCard(Map<String, dynamic> data) {
@@ -626,25 +737,20 @@ class _CameraScreenState extends State<CameraScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[50], // 요약 카드 배경은 아주 연한 회색으로 구분
+        color: Colors.grey[50],
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '${data['totalCalories']} kcal',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
+          Text(
+            '${data['totalCalories']} kcal',
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
           ),
           const SizedBox(height: 12),
           Row(
@@ -679,10 +785,12 @@ class _CameraScreenState extends State<CameraScreen> {
     List<XFile> images,
     List<String> textItems,
   ) {
+    bool hasContent = images.isNotEmpty || textItems.isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        (images.isEmpty && textItems.isEmpty)
+        (!hasContent)
             ? Container(
                 height: 60,
                 alignment: Alignment.centerLeft,
@@ -761,25 +869,46 @@ class _CameraScreenState extends State<CameraScreen> {
                     ),
                 ],
               ),
-        const SizedBox(height: 15),
-        if (images.isNotEmpty || textItems.isNotEmpty)
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () => _onAnalyzePressed(title),
-              icon: const Icon(Icons.analytics_outlined, size: 18),
-              label: const Text('분석 시작'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE8F5E9),
-                foregroundColor: Colors.green[700],
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+        if (hasContent) ...[
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _onAnalyzePressed(title),
+                  icon: const Icon(Icons.analytics_outlined, size: 18),
+                  label: const Text('분석 시작'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE8F5E9),
+                    foregroundColor: Colors.green[700],
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
                 ),
-                padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-            ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 80,
+                child: ElevatedButton(
+                  onPressed: () => _onCorrectionPressed(title),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[50],
+                    foregroundColor: Colors.red,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('초기화'),
+                ),
+              ),
+            ],
           ),
+        ],
       ],
     );
   }
