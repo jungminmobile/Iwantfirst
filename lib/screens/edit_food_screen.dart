@@ -133,7 +133,7 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
         : 0;
 
     return Scaffold(
-      backgroundColor: Colors.grey[100], // [수정] 배경색 연한 회색으로 변경
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
         title: const Text(
           '음식 확인/수정',
@@ -159,7 +159,6 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
                 ),
               ),
 
-              // 🟢 [수정] 총합계 카드 (분석 완료 시에만 표시)
               if (isAnalyzed)
                 Container(
                   width: double.infinity,
@@ -229,7 +228,6 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
                   itemBuilder: (ctx, index) {
                     if (isAnalyzed) {
                       final food = _analyzedFoods[index];
-                      // 🟢 [수정] 카드 형태로 감싸기
                       return _buildFoodCard(
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(
@@ -275,7 +273,6 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
                         ),
                       );
                     } else {
-                      // 🟢 [수정] 카드 형태로 감싸기
                       return _buildFoodCard(
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(
@@ -286,7 +283,7 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
                             initialValue: _foodList[index]['name'],
                             decoration: const InputDecoration(
                               labelText: '음식 이름',
-                              border: InputBorder.none, // 밑줄 제거
+                              border: InputBorder.none,
                               labelStyle: TextStyle(
                                 fontWeight: FontWeight.bold,
                               ),
@@ -298,7 +295,7 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
                             initialValue: _foodList[index]['amount'],
                             decoration: const InputDecoration(
                               labelText: '양',
-                              border: InputBorder.none, // 밑줄 제거
+                              border: InputBorder.none,
                             ),
                             onChanged: (v) => _foodList[index]['amount'] = v,
                           ),
@@ -317,7 +314,7 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
                 ),
               ),
 
-              // 하단 버튼 영역
+              // 하단 버튼 영역 (스타일 통일)
               Container(
                 padding: const EdgeInsets.all(20.0),
                 decoration: const BoxDecoration(
@@ -346,9 +343,11 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
                         label: Text(isAnalyzed ? '다시 수정하기' : '음식 추가'),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
+                          side: BorderSide(color: Colors.grey[300]!), // 테두리 색상
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                            borderRadius: BorderRadius.circular(16),
+                          ), // 둥근 모서리 통일
+                          foregroundColor: Colors.black, // 글씨색 검정
                         ),
                       ),
                     ),
@@ -361,16 +360,17 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
                         icon: Icon(isAnalyzed ? Icons.check : Icons.analytics),
                         label: Text(isAnalyzed ? '기록 완료' : '영양소 분석'),
                         style: ElevatedButton.styleFrom(
+                          // 분석 전(파랑) / 분석 후(형광 연두)
                           backgroundColor: isAnalyzed
-                              ? const Color(0xFF33FF00)
-                              : Colors.blue,
-                          foregroundColor: isAnalyzed
                               ? Colors.black
+                              : Colors.black,
+                          foregroundColor: isAnalyzed
+                              ? Colors.white
                               : Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                            borderRadius: BorderRadius.circular(16),
+                          ), // 둥근 모서리 통일
                           elevation: 0,
                         ),
                       ),
@@ -393,7 +393,6 @@ class _EditFoodScreenState extends State<EditFoodScreen> {
     );
   }
 
-  // 📦 리스트 아이템 카드 위젯 (추가됨)
   Widget _buildFoodCard({required Widget child}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
