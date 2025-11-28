@@ -154,7 +154,7 @@ class _StatsScreenState extends State<StatsScreen> {
     );
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: const Color(0xFFF5F5F5),
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -162,17 +162,14 @@ class _StatsScreenState extends State<StatsScreen> {
                 onRefresh: _fetchMonthlyData,
                 color: const Color(0xFF33FF00),
                 backgroundColor: Colors.white,
-
                 child: SingleChildScrollView(
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(20.0),
-
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 10), // 상단 여백
-                      // 🏷️ 타이틀 (날짜 제거됨)
+                      const SizedBox(height: 10),
                       const Text(
                         "식단 통계",
                         style: TextStyle(
@@ -181,17 +178,10 @@ class _StatsScreenState extends State<StatsScreen> {
                           color: Colors.black,
                         ),
                       ),
-
                       const SizedBox(height: 30),
-
-                      // 1. 그래프 섹션
                       _buildChartSection(),
-
                       const SizedBox(height: 16),
-
-                      // 2. 캘린더 + 상세 정보 카드
                       _buildCalendarAndStatsCard(),
-
                       const SizedBox(height: 40),
                     ],
                   ),
@@ -201,7 +191,6 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  // 📦 공통 카드 위젯
   Widget _buildSectionCard({required Widget child}) {
     return Container(
       width: double.infinity,
@@ -302,11 +291,9 @@ class _StatsScreenState extends State<StatsScreen> {
                   _dailyStats.containsKey(_formatDate(day)) ? ['data'] : [],
             ),
           ),
-
           const SizedBox(height: 10),
           const Divider(thickness: 1, height: 30),
           const SizedBox(height: 10),
-
           Column(
             children: [
               Text(
@@ -320,7 +307,6 @@ class _StatsScreenState extends State<StatsScreen> {
                 ),
               ),
               const SizedBox(height: 15),
-
               if (data != null) ...[
                 _buildStatRow(
                   '총 섭취 칼로리',
@@ -385,8 +371,50 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  // 🔥 [핵심 함수] 데이터 중 최대값을 찾아 그래프의 Y축 높이를 동적으로 계산
+  double _calculateDynamicMaxY() {
+    double maxPercentage = 0;
+
+    // 최근 7일 데이터 순회
+    for (int i = 0; i < 7; i++) {
+      final date = DateTime.now().subtract(Duration(days: 6 - i));
+      final dateKey = _formatDate(date);
+
+      if (_dailyStats.containsKey(dateKey)) {
+        final data = _dailyStats[dateKey]!;
+
+        // 활성화된 필터(칼로리, 탄, 단, 지)만 체크
+        if (_chartVisibility['cal']! && _goalCal > 0) {
+          double pct = (data['cal'] ?? 0) / _goalCal * 100;
+          if (pct > maxPercentage) maxPercentage = pct;
+        }
+        if (_chartVisibility['carbs']! && _goalCarbs > 0) {
+          double pct = (data['carbs'] ?? 0) / _goalCarbs * 100;
+          if (pct > maxPercentage) maxPercentage = pct;
+        }
+        if (_chartVisibility['protein']! && _goalProtein > 0) {
+          double pct = (data['protein'] ?? 0) / _goalProtein * 100;
+          if (pct > maxPercentage) maxPercentage = pct;
+        }
+        if (_chartVisibility['fat']! && _goalFat > 0) {
+          double pct = (data['fat'] ?? 0) / _goalFat * 100;
+          if (pct > maxPercentage) maxPercentage = pct;
+        }
+      }
+    }
+
+    // 기본값 110%보다 작으면 110% 유지, 크면 최대값 + 20% 여유
+    return maxPercentage < 110 ? 110 : maxPercentage * 1.2;
+  }
+
   LineChartData _buildLineChartData() {
+    // 🔥 계산된 최대 높이 가져오기
+    final double dynamicMaxY = _calculateDynamicMaxY();
+
     return LineChartData(
+      // 🟢 자르지 않음 (그래프 점이 온전히 보이게)
+      clipData: const FlClipData.none(),
+
       lineTouchData: LineTouchData(
         touchTooltipData: LineTouchTooltipData(
           getTooltipColor: (_) => Colors.black.withOpacity(0.8),
@@ -471,7 +499,7 @@ class _StatsScreenState extends State<StatsScreen> {
           _buildLine(Colors.orange, 'fat', _goalFat),
       ],
       minY: 0,
-      maxY: 160,
+      maxY: dynamicMaxY, // 🔥 동적으로 계산된 높이 적용!
     );
   }
 
