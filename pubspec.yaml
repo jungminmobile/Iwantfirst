@@ -110,6 +110,8 @@ flutter:
     - family: Suite
       fonts:
         - asset: lib/assets/fonts/SUITE-Regular.ttf
+  assets:
+    - lib/assets/icon/
 
 flutter_launcher_icons:
   android: "launcher_icon" # 안드로이드 아이콘 이름 설정
