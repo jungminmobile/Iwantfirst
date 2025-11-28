@@ -20,7 +20,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
   final _heightController = TextEditingController();
-  final _weightController = TextEditingController(); // ★ 1. 몸무게 컨트롤러 추가
+  final _weightController = TextEditingController();
   final _goalCalorieController = TextEditingController();
   final _goalCarbsController = TextEditingController();
   final _goalProteinController = TextEditingController();
@@ -41,11 +41,14 @@ class _SignUpPageState extends State<SignUpPage> {
   int? _recommendedProtein;
   int? _recommendedFat;
 
+  // 🎨 디자인용 색상 (앱 테마와 통일)
+  final Color _primaryColor = const Color(0xFF33FF00); // 형광 연두
+  final Color _backgroundColor = const Color(0xFFF5F5F5); // 연한 회색 배경
 
   @override
   void initState() {
     super.initState();
-    // ★ 2. 키, 몸무게 값이 변경될 때마다 계산 함수 호출
+    // 키, 몸무게 값이 변경될 때마다 계산 함수 호출
     _heightController.addListener(_calculateRecommendations);
     _weightController.addListener(_calculateRecommendations);
 
@@ -58,9 +61,9 @@ class _SignUpPageState extends State<SignUpPage> {
 
   @override
   void dispose() {
-    // 모든 컨트롤러와 FocusNode, 리스너를 정리하여 메모리 누수 방지
     _heightController.removeListener(_calculateRecommendations);
     _weightController.removeListener(_calculateRecommendations);
+
     _calorieFocusNode.removeListener(() => setState(() {}));
     _carbsFocusNode.removeListener(() => setState(() {}));
     _proteinFocusNode.removeListener(() => setState(() {}));
@@ -83,12 +86,11 @@ class _SignUpPageState extends State<SignUpPage> {
     super.dispose();
   }
 
-  // ★ 3. 표준 권장 섭취량 계산 함수
+  // 표준 권장 섭취량 계산 함수
   void _calculateRecommendations() {
     final double? height = double.tryParse(_heightController.text);
     final double? weight = double.tryParse(_weightController.text);
 
-    // 키 또는 몸무게 값이 유효하지 않으면 계산하지 않음
     if (height == null || height <= 0 || weight == null || weight <= 0) {
       setState(() {
         _recommendedCalories = null;
@@ -99,7 +101,6 @@ class _SignUpPageState extends State<SignUpPage> {
       return;
     }
 
-    // 해리스-베네딕트 방정식 (나이는 30세, 활동량은 적음(x1.2)으로 가정)
     double bmr;
     if (_selectedGender == '남성') {
       bmr = (66.47 + (13.75 * weight) + (5 * height) - (6.76 * 30)) * 1.2;
@@ -107,7 +108,6 @@ class _SignUpPageState extends State<SignUpPage> {
       bmr = (655.1 + (9.56 * weight) + (1.85 * height) - (4.68 * 30)) * 1.2;
     }
 
-    // 계산된 값을 상태 변수에 저장 (탄수화물 50%, 단백질 30%, 지방 20% 비율)
     setState(() {
       _recommendedCalories = bmr.round();
       _recommendedCarbs = ((_recommendedCalories! * 0.5) / 4).round();
@@ -116,42 +116,61 @@ class _SignUpPageState extends State<SignUpPage> {
     });
   }
 
-  // ★ 4. 가입 로직 수정 (권장량 저장 및 자동 로그아웃)
+  // 가입 로직
   Future<void> _signUp() async {
-    setState(() { _isLoading = true; });
+    setState(() {
+      _isLoading = true;
+    });
 
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('이메일과 비밀번호를 입력해주세요.')));
-      setState(() { _isLoading = false; });
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('이메일과 비밀번호를 입력해주세요.')));
+      setState(() {
+        _isLoading = false;
+      });
       return;
     }
 
     try {
       // 1. 계정 생성
-      final UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      final UserCredential userCredential = await _auth
+          .createUserWithEmailAndPassword(email: email, password: password);
       final String uid = userCredential.user!.uid;
 
       // 2. 데이터베이스에 정보 저장
       await _firestore.collection(_userCollectionPath).doc(uid).set({
-        'account_info': {'email': email,'created_at': FieldValue.serverTimestamp()},
+        'account_info': {
+          'email': email,
+          'created_at': FieldValue.serverTimestamp(),
+        },
         'profile': {
           'name': _nameController.text.trim(),
           'height': double.tryParse(_heightController.text) ?? 0.0,
-          'weight': double.tryParse(_weightController.text) ?? 0.0, // 몸무게 저장
+          'weight': double.tryParse(_weightController.text) ?? 0.0,
           'gender': _selectedGender,
         },
         'goals': {
-          // 사용자가 직접 입력했으면 그 값을, 아니면 계산된 권장량을 저장
-          'target_calories': int.tryParse(_goalCalorieController.text.trim()) ?? _recommendedCalories ?? 2000,
-          'target_carbs': int.tryParse(_goalCarbsController.text.trim()) ?? _recommendedCarbs ?? 0,
-          'target_protein': int.tryParse(_goalProteinController.text.trim()) ?? _recommendedProtein ?? 0,
-          'target_fat': int.tryParse(_goalFatController.text.trim()) ?? _recommendedFat ?? 0,
+          'target_calories':
+              int.tryParse(_goalCalorieController.text.trim()) ??
+              _recommendedCalories ??
+              2000,
+          'target_carbs':
+              int.tryParse(_goalCarbsController.text.trim()) ??
+              _recommendedCarbs ??
+              0,
+          'target_protein':
+              int.tryParse(_goalProteinController.text.trim()) ??
+              _recommendedProtein ??
+              0,
+          'target_fat':
+              int.tryParse(_goalFatController.text.trim()) ??
+              _recommendedFat ??
+              0,
         },
       });
 
@@ -160,19 +179,28 @@ class _SignUpPageState extends State<SignUpPage> {
 
       // 4. 로그인 페이지로 돌아가기
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('회원가입 성공! 이제 로그인하세요.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('회원가입 성공! 이제 로그인하세요.')));
         Navigator.pop(context);
       }
-
     } on FirebaseAuthException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('회원가입 에러: ${e.message}')));
-        setState(() { _isLoading = false; });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('회원가입 에러: ${e.message}')));
+        setState(() {
+          _isLoading = false;
+        });
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('알 수 없는 에러: $e')));
-        setState(() { _isLoading = false; });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('알 수 없는 에러: $e')));
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -180,113 +208,339 @@ class _SignUpPageState extends State<SignUpPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('회원가입')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: _backgroundColor, // 배경색 통일
+      appBar: AppBar(
+        title: const Text(
+          '회원가입',
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+        ),
+        centerTitle: true,
+        backgroundColor: _backgroundColor,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black), // 뒤로가기 아이콘 검정색
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. 계정 정보 섹션
+                  const Text(
+                    "계정 정보",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 15),
+                  _buildSectionCard(
+                    children: [
+                      _buildTextField(
+                        "이메일",
+                        _emailController,
+                        icon: Icons.email_outlined,
+                      ),
+                      const SizedBox(height: 20),
+                      _buildTextField(
+                        "비밀번호 (6자 이상)",
+                        _passwordController,
+                        icon: Icons.lock_outline,
+                        obscureText: true,
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 30),
+
+                  // 2. 프로필 정보 섹션
+                  const Text(
+                    "프로필 정보",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 15),
+                  _buildSectionCard(
+                    children: [
+                      _buildTextField(
+                        "이름/닉네임",
+                        _nameController,
+                        icon: Icons.person_outline,
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildTextField(
+                              "키",
+                              _heightController,
+                              suffix: "cm",
+                              isNumber: true,
+                            ),
+                          ),
+                          const SizedBox(width: 15),
+                          Expanded(
+                            child: _buildTextField(
+                              "몸무게",
+                              _weightController,
+                              suffix: "kg",
+                              isNumber: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        "성별",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _buildGenderSelector(),
+                    ],
+                  ),
+
+                  const SizedBox(height: 30),
+
+                  // 3. 목표 설정 섹션
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        "목표 설정",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (_recommendedCalories != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _primaryColor.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            "권장: $_recommendedCalories kcal",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.green[800],
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  _buildSectionCard(
+                    children: [
+                      _buildTextField(
+                        "목표 칼로리",
+                        _goalCalorieController,
+                        suffix: "kcal",
+                        isNumber: true,
+                        focusNode: _calorieFocusNode,
+                        placeholder: _recommendedCalories?.toString(),
+                      ),
+                      const SizedBox(height: 20),
+                      _buildTextField(
+                        "목표 탄수화물",
+                        _goalCarbsController,
+                        suffix: "g",
+                        isNumber: true,
+                        focusNode: _carbsFocusNode,
+                        placeholder: _recommendedCarbs?.toString(),
+                      ),
+                      const SizedBox(height: 20),
+                      _buildTextField(
+                        "목표 단백질",
+                        _goalProteinController,
+                        suffix: "g",
+                        isNumber: true,
+                        focusNode: _proteinFocusNode,
+                        placeholder: _recommendedProtein?.toString(),
+                      ),
+                      const SizedBox(height: 20),
+                      _buildTextField(
+                        "목표 지방",
+                        _goalFatController,
+                        suffix: "g",
+                        isNumber: true,
+                        focusNode: _fatFocusNode,
+                        placeholder: _recommendedFat?.toString(),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  // 가입 완료 버튼
+                  SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _signUp,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black, // 버튼 검은색 (형광색과 대비)
+                        foregroundColor: Colors.white, // 글씨 흰색
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        "가입 완료 및 프로필 저장",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+    );
+  }
+
+  // 📦 흰색 카드 위젯
+  Widget _buildSectionCard({required List<Widget> children}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+
+  // ⌨️ 커스텀 텍스트 필드 (트렌디한 스타일)
+  Widget _buildTextField(
+    String label,
+    TextEditingController controller, {
+    String? suffix,
+    bool isNumber = false,
+    IconData? icon,
+    bool obscureText = false,
+    FocusNode? focusNode,
+    String? placeholder,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text("계정 정보", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            TextField(controller: _emailController, decoration: const InputDecoration(labelText: '이메일')),
-            TextField(controller: _passwordController, decoration: const InputDecoration(labelText: '비밀번호 (6자 이상)'), obscureText: true),
-
-            const SizedBox(height: 30),
-            const Text("프로필 정보", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            TextField(controller: _nameController, decoration: const InputDecoration(labelText: '이름/닉네임')),
-            TextField(controller: _heightController, decoration: const InputDecoration(labelText: '키 (cm)'), keyboardType: TextInputType.number),
-
-            // ★ 5. 몸무게 입력 필드 UI 추가
-            const SizedBox(height: 8),
-            TextField(controller: _weightController, decoration: const InputDecoration(labelText: '몸무게 (kg)'), keyboardType: TextInputType.number),
-
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _selectedGender,
-              decoration: const InputDecoration(labelText: '성별'),
-              items: ['남성', '여성'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              onChanged: (val) {
-                // 성별 변경 시에도 다시 계산
-                if (val != null) {
-                  setState(() => _selectedGender = val);
-                  _calculateRecommendations();
-                }
-              },
-            ),
-
-            const SizedBox(height: 30),
-            const Text("목표 설정", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-
-            // ★ 6. 목표 설정 UI 수정 (힌트 기능 적용)
-            TextField(
-              controller: _goalCalorieController,
-              focusNode: _calorieFocusNode, // FocusNode 연결
-              decoration: InputDecoration(
-                labelText: '목표 칼로리 (kcal)',
-                // 포커스 상태이고, 입력값이 없고, 추천값이 있을 때만 힌트 표시
-                hintText: _calorieFocusNode.hasFocus && _goalCalorieController.text.isEmpty && _recommendedCalories != null
-                    ? '권장: $_recommendedCalories kcal'
-                    : null,
-                hintStyle: const TextStyle(color: Colors.green), // 힌트 텍스트 색상
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _goalCarbsController,
-              focusNode: _carbsFocusNode,
-              decoration: InputDecoration(
-                labelText: '목표 탄수화물 (g)',
-                hintText: _carbsFocusNode.hasFocus && _goalCarbsController.text.isEmpty && _recommendedCarbs != null
-                    ? '권장: $_recommendedCarbs g'
-                    : null,
-                hintStyle: const TextStyle(color: Colors.green),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _goalProteinController,
-              focusNode: _proteinFocusNode,
-              decoration: InputDecoration(
-                labelText: '목표 단백질 (g)',
-                hintText: _proteinFocusNode.hasFocus && _goalProteinController.text.isEmpty && _recommendedProtein != null
-                    ? '권장: $_recommendedProtein g'
-                    : null,
-                hintStyle: const TextStyle(color: Colors.green),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _goalFatController,
-              focusNode: _fatFocusNode,
-              decoration: InputDecoration(
-                labelText: '목표 지방 (g)',
-                hintText: _fatFocusNode.hasFocus && _goalFatController.text.isEmpty && _recommendedFat != null
-                    ? '권장: $_recommendedFat g'
-                    : null,
-                hintStyle: const TextStyle(color: Colors.green),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-
-
-            const SizedBox(height: 40),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _signUp,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('가입 완료 및 프로필 저장'),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+                fontWeight: FontWeight.bold,
               ),
             ),
+            if (placeholder != null &&
+                controller.text.isEmpty &&
+                focusNode != null &&
+                focusNode.hasFocus)
+              Text(
+                "권장: $placeholder",
+                style: TextStyle(fontSize: 12, color: Colors.green[700]),
+              ),
           ],
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          focusNode: focusNode,
+          keyboardType: isNumber
+              ? const TextInputType.numberWithOptions(decimal: true)
+              : TextInputType.text,
+          obscureText: obscureText,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.grey[100], // 연한 회색 배경
+            prefixIcon: icon != null
+                ? Icon(icon, color: Colors.grey[600])
+                : null,
+            suffixText: suffix,
+            suffixStyle: const TextStyle(
+              color: Colors.grey,
+              fontWeight: FontWeight.bold,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              vertical: 16,
+              horizontal: 16,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none, // 테두리 없애기
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(
+                color: Colors.black,
+                width: 1.5,
+              ), // 포커스 시 검은색 테두리
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 🚻 성별 선택 토글 버튼
+  Widget _buildGenderSelector() {
+    return Row(
+      children: [
+        Expanded(child: _buildGenderButton('남성')),
+        const SizedBox(width: 15),
+        Expanded(child: _buildGenderButton('여성')),
+      ],
+    );
+  }
+
+  Widget _buildGenderButton(String gender) {
+    bool isSelected = _selectedGender == gender;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _selectedGender = gender);
+        _calculateRecommendations();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.black
+              : Colors.grey[100], // 선택되면 검정, 아니면 회색
+          borderRadius: BorderRadius.circular(12),
+          border: isSelected ? null : Border.all(color: Colors.grey.shade300),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          gender,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.grey,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
         ),
       ),
     );
