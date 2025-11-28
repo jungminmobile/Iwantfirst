@@ -9,6 +9,7 @@ class CalorieChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 퍼센트 계산
     double percentage = (target == 0) ? 0 : current / target;
 
     return Padding(
@@ -20,7 +21,7 @@ class CalorieChart extends StatelessWidget {
           children: [
             PieChart(
               PieChartData(
-                startDegreeOffset: 180,
+                startDegreeOffset: 180, // 반원 시작 각도 (9시 방향)
                 pieTouchData: PieTouchData(enabled: false),
                 centerSpaceRadius: 70,
                 sectionsSpace: 0,
@@ -31,7 +32,9 @@ class CalorieChart extends StatelessWidget {
                     color: Colors.transparent,
                     radius: 40,
                     showTitle: false,
-                    gradient: _getDynamicGradient(percentage), // 🔥 여기가 핵심
+                    gradient: _getDynamicGradient(
+                      percentage,
+                    ), // 🔥 최종 수정된 그라데이션
                   ),
                   // 2. 남은 목표 섹션
                   PieChartSectionData(
@@ -40,7 +43,7 @@ class CalorieChart extends StatelessWidget {
                     radius: 40,
                     showTitle: false,
                   ),
-                  // 3. 투명 섹션
+                  // 3. 투명 섹션 (반원을 만들기 위한 하단 빈 공간)
                   PieChartSectionData(
                     value: 100,
                     color: Colors.transparent,
@@ -92,9 +95,12 @@ class CalorieChart extends StatelessWidget {
     return 100 - (percentage * 100);
   }
 
-  // 🔥 [최종] 3단계 그라데이션 로직
+  // 🔥 [최종 로직]
+  // 0~80%: 파랑-초록 그라데이션
+  // 80~100%: 오른쪽에서 초록색이 밀고 들어옴
+  // 100~200%: 왼쪽에서 빨간색이 밀고 들어옴
   Gradient _getDynamicGradient(double percentage) {
-    // ✅ 1단계: 0% ~ 80% (원하시던 파랑->초록 그라데이션 유지)
+    // ✅ 1단계: 0% ~ 80% (파랑->초록 그라데이션 유지)
     if (percentage < 0.8) {
       return const LinearGradient(
         colors: [Color(0xFF33CCFF), Color(0xFF33CC00)], // 파랑 -> 초록
@@ -102,22 +108,24 @@ class CalorieChart extends StatelessWidget {
         end: Alignment.centerRight,
       );
     }
-    // ✅ 2단계: 80% ~ 100% (오른쪽에서 초록색 덩어리가 밀고 들어옴)
+    // ✅ 2단계: 80% ~ 100% (오른쪽에서 진한 초록색이 밀고 들어옴)
     else if (percentage <= 1.0) {
-      double progress = (percentage - 0.8) / 0.2; // 0.0 ~ 1.0 진행률
-      double splitPoint = 1.0 - progress; // 오른쪽에서 왼쪽으로 이동
+      // 0.8 ~ 1.0 진행률 (0.0 ~ 1.0)
+      double progress = (percentage - 0.8) / 0.2;
+      // 오른쪽에서 왼쪽으로 이동하는 분기점
+      double splitPoint = 1.0 - progress;
 
       return LinearGradient(
         colors: const [
-          Color(0xFF33CCFF), // 왼쪽: 파랑 (기존 그라데이션 시작)
-          Color(0xFF33CC00), // 중간: 초록 (기존 그라데이션 끝)
+          Color(0xFF33CCFF), // 왼쪽: 파랑 (그라데이션 시작)
+          Color(0xFF33CC00), // 중간: 초록 (그라데이션 끝)
           Color(0xFF33CC00), // 중간: 단색 초록 시작
           Color(0xFF33CC00), // 오른쪽: 단색 초록
         ],
         stops: [
           0.0,
-          (splitPoint - 0.1).clamp(0.0, 1.0), // 기존 그라데이션이 밀려나는 지점
-          (splitPoint + 0.1).clamp(0.0, 1.0), // 단색 초록이 시작되는 지점
+          (splitPoint - 0.1).clamp(0.0, 1.0), // 기존 그라데이션 영역
+          (splitPoint + 0.1).clamp(0.0, 1.0), // 단색 초록 영역 시작
           1.0,
         ],
         begin: Alignment.centerLeft,
@@ -132,22 +140,22 @@ class CalorieChart extends StatelessWidget {
         end: Alignment.centerRight,
       );
     }
-    // ✅ 4단계: 100% ~ 200% (오른쪽에서 빨간색 덩어리가 밀고 들어옴)
+    // ✅ 4단계: 100% ~ 200% (왼쪽에서 빨간색이 밀고 들어옴 - 방향 반전됨)
     else {
+      // 1.0 ~ 2.0 진행률 (0.0 ~ 1.0)
       double progress = percentage - 1.0;
-      double splitPoint = 1.0 - progress;
 
       return LinearGradient(
         colors: const [
-          Color(0xFF33CC00), // 왼쪽: 초록
-          Color(0xFF33CC00), // 중간: 초록
+          Colors.red, // 왼쪽: 빨강 (이미 찬 부분)
           Colors.red, // 중간: 빨강
-          Colors.red, // 오른쪽: 빨강
+          Color(0xFF33CC00), // 중간: 초록 (아직 안 찬 부분)
+          Color(0xFF33CC00), // 오른쪽: 초록
         ],
         stops: [
           0.0,
-          (splitPoint - 0.15).clamp(0.0, 1.0), // 부드러운 경계선
-          (splitPoint + 0.15).clamp(0.0, 1.0),
+          (progress - 0.15).clamp(0.0, 1.0), // 빨간색 끝나는 지점 (왼쪽 -> 오른쪽)
+          (progress + 0.15).clamp(0.0, 1.0), // 초록색 시작 지점
           1.0,
         ],
         begin: Alignment.centerLeft,
