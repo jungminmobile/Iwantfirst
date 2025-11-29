@@ -76,8 +76,8 @@ class _LoginPageState extends State<LoginPage> {
                 // 1. 로고 이미지
                 Image.asset(
                   'lib/assets/icon/icon_jikmuk.png', // 요청하신 경로
-                  width: 120, // 적당한 크기
-                  height: 120,
+                  width: 200, // 적당한 크기
+                  height: 200,
                 ),
                 const SizedBox(height: 16),
 
