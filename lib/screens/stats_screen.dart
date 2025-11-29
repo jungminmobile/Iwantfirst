@@ -143,6 +143,45 @@ class _StatsScreenState extends State<StatsScreen> {
   static String _formatDate(DateTime date) =>
       DateFormat('yyyy-MM-dd').format(date);
 
+  // 🔥 [수정됨] 달성률 구간별 마커 색상 지정
+  Color _getMarkerColor(DateTime day) {
+    final dateKey = _formatDate(day);
+    // 데이터가 없으면 투명
+    if (!_dailyStats.containsKey(dateKey)) return Colors.transparent;
+
+    double currentCal = _dailyStats[dateKey]!['cal'] ?? 0;
+    if (_goalCal == 0) return Colors.grey;
+
+    double percentage = currentCal / _goalCal;
+
+    // 옵틱 옐로우 (형광 노랑) 색상 정의
+    const opticYellow = Color(0xFFCCFF00);
+    const mainGreen = Color(0xFF33FF00);
+
+    if (percentage < 0.5) {
+      // 0% ~ 50%: 빨간색 (너무 부족)
+      return Colors.red.withOpacity(0.8);
+    } else if (percentage < 0.75) {
+      // 50% ~ 75%: 주황색 (부족)
+      return Colors.orange.withOpacity(0.8);
+    } else if (percentage < 0.9) {
+      // 75% ~ 90%: 옵틱 옐로우 (약간 부족)
+      return opticYellow.withOpacity(0.8);
+    } else if (percentage <= 1.1) {
+      // 90% ~ 110%: 초록색 (목표 달성! 적정 구간)
+      return mainGreen.withOpacity(0.8);
+    } else if (percentage < 1.25) {
+      // 110% ~ 125%: 옵틱 옐로우 (약간 과식)
+      return opticYellow.withOpacity(0.8);
+    } else if (percentage < 1.5) {
+      // 125% ~ 150%: 주황색 (과식)
+      return Colors.orange.withOpacity(0.8);
+    } else {
+      // 150% 이상: 빨간색 (폭식 경고)
+      return Colors.red.withOpacity(0.8);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(
@@ -269,6 +308,8 @@ class _StatsScreenState extends State<StatsScreen> {
                 _selectedDay = selectedDay;
                 _focusedDay = focusedDay;
               }),
+
+              // 기본 마커 스타일은 숨김
               calendarStyle: const CalendarStyle(
                 todayDecoration: BoxDecoration(
                   color: Color(0xFF33FFFF),
@@ -278,17 +319,31 @@ class _StatsScreenState extends State<StatsScreen> {
                   color: Color(0xFF33FF00),
                   shape: BoxShape.circle,
                 ),
-                markerDecoration: BoxDecoration(
-                  color: Color(0xFF28E090),
-                  shape: BoxShape.circle,
-                ),
+                markersMaxCount: 0,
               ),
               headerStyle: const HeaderStyle(
                 formatButtonVisible: false,
                 titleCentered: true,
               ),
+
               eventLoader: (day) =>
                   _dailyStats.containsKey(_formatDate(day)) ? ['data'] : [],
+
+              // 날짜 셀 커스텀 빌더
+              calendarBuilders: CalendarBuilders(
+                // 1. 기본 날짜 (평일)
+                defaultBuilder: (context, day, focusedDay) {
+                  return _buildDateCell(day, false);
+                },
+                // 2. 오늘 날짜
+                todayBuilder: (context, day, focusedDay) {
+                  return _buildDateCell(day, false, isToday: true);
+                },
+                // 3. 선택된 날짜
+                selectedBuilder: (context, day, focusedDay) {
+                  return _buildDateCell(day, true);
+                },
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -350,6 +405,36 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  // 날짜 하나를 그리는 위젯
+  Widget _buildDateCell(DateTime day, bool isSelected, {bool isToday = false}) {
+    Color bgColor = _getMarkerColor(day);
+
+    bool hasData = bgColor != Colors.transparent;
+    // 데이터가 있거나 선택된 날짜는 검은색 글씨, 오늘은 파란색 글씨
+    Color textColor = hasData || isSelected
+        ? Colors.black
+        : (isToday ? Colors.blue : Colors.black);
+
+    BoxDecoration decoration = BoxDecoration(
+      color: bgColor,
+      shape: BoxShape.circle,
+      // 선택된 날짜는 검은색 테두리로 강조
+      border: isSelected ? Border.all(color: Colors.black, width: 2) : null,
+    );
+
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.all(6.0),
+        alignment: Alignment.center,
+        decoration: decoration,
+        child: Text(
+          day.day.toString(),
+          style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFilterButton(String label, String key, Color color) {
     bool isActive = _chartVisibility[key]!;
     return GestureDetector(
@@ -371,19 +456,13 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  // 🔥 [핵심 함수] 데이터 중 최대값을 찾아 그래프의 Y축 높이를 동적으로 계산
   double _calculateDynamicMaxY() {
     double maxPercentage = 0;
-
-    // 최근 7일 데이터 순회
     for (int i = 0; i < 7; i++) {
       final date = DateTime.now().subtract(Duration(days: 6 - i));
       final dateKey = _formatDate(date);
-
       if (_dailyStats.containsKey(dateKey)) {
         final data = _dailyStats[dateKey]!;
-
-        // 활성화된 필터(칼로리, 탄, 단, 지)만 체크
         if (_chartVisibility['cal']! && _goalCal > 0) {
           double pct = (data['cal'] ?? 0) / _goalCal * 100;
           if (pct > maxPercentage) maxPercentage = pct;
@@ -402,19 +481,14 @@ class _StatsScreenState extends State<StatsScreen> {
         }
       }
     }
-
-    // 기본값 110%보다 작으면 110% 유지, 크면 최대값 + 20% 여유
     return maxPercentage < 110 ? 110 : maxPercentage * 1.2;
   }
 
   LineChartData _buildLineChartData() {
-    // 🔥 계산된 최대 높이 가져오기
     final double dynamicMaxY = _calculateDynamicMaxY();
 
     return LineChartData(
-      // 🟢 자르지 않음 (그래프 점이 온전히 보이게)
       clipData: const FlClipData.none(),
-
       lineTouchData: LineTouchData(
         touchTooltipData: LineTouchTooltipData(
           getTooltipColor: (_) => Colors.black.withOpacity(0.8),
@@ -427,10 +501,8 @@ class _StatsScreenState extends State<StatsScreen> {
             final dateKey = _formatDate(date);
             final dailyData = _dailyStats[dateKey];
             final color = spot.bar.color ?? Colors.black;
-
             String label = '', unit = '';
             double realValue = 0;
-
             if (color == Colors.redAccent) {
               label = '칼로리';
               realValue = dailyData?['cal'] ?? 0;
@@ -448,7 +520,6 @@ class _StatsScreenState extends State<StatsScreen> {
               realValue = dailyData?['fat'] ?? 0;
               unit = 'g';
             }
-
             return LineTooltipItem(
               '${DateFormat('M/d').format(date)}\n$label: ${spot.y.toInt()}% (${realValue.toInt()}$unit)',
               const TextStyle(
@@ -499,14 +570,14 @@ class _StatsScreenState extends State<StatsScreen> {
           _buildLine(Colors.orange, 'fat', _goalFat),
       ],
       minY: 0,
-      maxY: dynamicMaxY, // 🔥 동적으로 계산된 높이 적용!
+      maxY: dynamicMaxY,
     );
   }
 
   LineChartBarData _buildLine(Color color, String key, double goal) {
     return LineChartBarData(
       spots: _getPercentageSpots(key, goal),
-      isCurved: true,
+      isCurved: false,
       color: color,
       barWidth: 3,
       isStrokeCapRound: true,
@@ -519,11 +590,9 @@ class _StatsScreenState extends State<StatsScreen> {
     for (int i = 0; i < 7; i++) {
       final date = DateTime.now().subtract(Duration(days: 6 - i));
       final dateKey = _formatDate(date);
-
       if (!_dailyStats.containsKey(dateKey)) {
         continue;
       }
-
       final value = _dailyStats[dateKey]![key] ?? 0;
       final double percentage = (goal == 0) ? 0 : (value / goal * 100);
       spots.add(FlSpot(i.toDouble(), percentage));
