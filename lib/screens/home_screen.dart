@@ -37,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchTodayData();
   }
 
-  // 🔥 오늘 데이터 가져오기
+  // 오늘 데이터 가져오기
   Future<void> _fetchTodayData() async {
     if (!_isLoading) {
       setState(() {
@@ -146,33 +146,34 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 5), // 상단 여백
-                      // 👋 타이틀 영역
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      // 타이틀 영역
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
                         children: [
-                          Text(
-                            todayDate, // 1. 날짜
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          const SizedBox(height: 5),
                           const Text(
-                            "오늘의 식단", // 2. 제목
+                            "오늘의 식단",
                             style: TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.w800,
                               color: Colors.black,
                             ),
                           ),
+                          const SizedBox(width: 8,),
+                          Text(
+                            todayDate,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey[600],
+                            ),
+                          ),
                         ],
                       ),
 
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 10),
 
-                      // 🏝️ 1번 섬: 칼로리 섹션
+                      // 1번 섬: 칼로리 섹션
                       _buildSectionCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       const SizedBox(height: 16),
 
-                      // 🏝️ 2번 섬: 영양소 상세
+                      // 2번 섬: 영양소 상세
                       _buildSectionCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,7 +210,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             const SizedBox(height: 20),
 
-                            // 👇 [변경] 기존 Row 삭제하고 MacroChart 사용
+                            // [변경] 기존 Row 삭제하고 MacroChart 사용
                             MacroChart(
                               carbs: _currentCarbs,
                               targetCarbs: _targetCarbs,
@@ -231,7 +232,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 📦 카드 UI 위젯
+  // 카드 UI 위젯
   Widget _buildSectionCard({required Widget child}) {
     return Container(
       width: double.infinity,

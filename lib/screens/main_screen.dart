@@ -45,7 +45,7 @@ class _MainScreenState extends State<MainScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: _onItemTapped,
-        indicatorColor: Colors.green.shade200, // 선택된 탭 배경색
+        indicatorColor: Color(0x4444FF33), // 선택된 탭 배경색
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),

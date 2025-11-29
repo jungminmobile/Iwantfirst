@@ -6,7 +6,7 @@ import '../api_config.dart';
 
 class GeminiService {
   final model = GenerativeModel(
-    model: 'gemini-2.5-pro',
+    model: 'gemini-2.5-flash',
     apiKey: geminiApiKey,
     generationConfig: GenerationConfig(
       responseMimeType: 'application/json',

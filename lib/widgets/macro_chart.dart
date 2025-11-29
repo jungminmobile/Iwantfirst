@@ -1,4 +1,3 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 class MacroChart extends StatelessWidget {
@@ -6,7 +5,10 @@ class MacroChart extends StatelessWidget {
   final double protein, targetProtein;
   final double fat, targetFat;
 
-  const MacroChart({
+  // 🟢 [신규] 초과 시 적용할 강렬한 빨간색 정의
+  final Color warningColor = Colors.redAccent[700]!;
+
+  MacroChart({
     super.key,
     required this.carbs,
     required this.targetCarbs,
@@ -18,199 +20,106 @@ class MacroChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 260,
-      child: BarChart(
-        BarChartData(
-          alignment: BarChartAlignment.spaceAround,
-          maxY: 120,
-          barTouchData: BarTouchData(
-            enabled: true,
-            touchTooltipData: BarTouchTooltipData(
-              getTooltipColor: (_) => Colors.white,
-              getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                double originalValue = 0;
-                switch (group.x) {
-                  case 0:
-                    originalValue = carbs;
-                    break;
-                  case 1:
-                    originalValue = protein;
-                    break;
-                  case 2:
-                    originalValue = fat;
-                    break;
-                }
-                return BarTooltipItem(
-                  '${originalValue.toInt()}g',
-                  const TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                );
-              },
-            ),
-          ),
-          titlesData: FlTitlesData(
-            show: true,
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 80,
-                getTitlesWidget: (double value, TitleMeta meta) {
-                  String label = '';
-                  double current = 0;
-                  double target = 1;
-
-                  switch (value.toInt()) {
-                    case 0:
-                      label = '탄수화물';
-                      current = carbs;
-                      target = targetCarbs;
-                      break;
-                    case 1:
-                      label = '단백질';
-                      current = protein;
-                      target = targetProtein;
-                      break;
-                    case 2:
-                      label = '지방';
-                      current = fat;
-                      target = targetFat;
-                      break;
-                  }
-
-                  int percent = (target == 0)
-                      ? 0
-                      : (current / target * 100).toInt();
-
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Column(
-                      children: [
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$percent%',
-                          style: const TextStyle(
-                            color: Colors.black87,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${current.toInt()} / ${target.toInt()}g',
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                            fontWeight: FontWeight.w500,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            leftTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-          ),
-          borderData: FlBorderData(show: false),
-          gridData: const FlGridData(show: false),
-          barGroups: [
-            _makeBarGroup(0, carbs, targetCarbs, Colors.green),
-            _makeBarGroup(1, protein, targetProtein, Colors.blue),
-            _makeBarGroup(2, fat, targetFat, Colors.orange),
-          ],
-        ),
-      ),
+    return Column(
+      children: [
+        // 각 영양소별로 바 생성 (기본 색상 전달)
+        _buildHorizontalBar("탄수화물", carbs, targetCarbs, Color(0x66DB6A)),
+        const SizedBox(height: 20),
+        _buildHorizontalBar("단백질", protein, targetProtein, Color(0xFF7043)),
+        const SizedBox(height: 20),
+        _buildHorizontalBar("지방", fat, targetFat, Color(0xFDA935)),
+      ],
     );
   }
 
-  double _calculateMaxY() {
-    return 120;
-  }
+  Widget _buildHorizontalBar(String label, double current, double target, Color baseColor) {
+    // 퍼센트 계산 및 초과 여부 확인
+    double percentage = target > 0 ? current / target : 0;
+    bool isOver = percentage > 1.2;
 
-  BarChartGroupData _makeBarGroup(
-    int x,
-    double current,
-    double target,
-    Color color,
-  ) {
-    // 1. 퍼센트 계산
-    double percentage = (target == 0) ? 0 : (current / target * 100);
+    // 초과 여부에 따라 최종 표시 색상 결정
+    Color finalColor = isOver ? warningColor : baseColor;
 
-    // 2. 높이 제한
-    double barHeight = (percentage > 100) ? 100 : percentage;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. 라벨 및 수치 텍스트
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            RichText(
+              text: TextSpan(
+                style: const TextStyle(color: Colors.black, fontSize: 12),
+                children: [
+                  TextSpan(
+                    text: '${current.toInt()}g',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      // 🟢 초과 시 글자 색상을 빨갛게 변경
+                      // (초과 안 했을 땐 검은색 유지)
+                      color: isOver ? finalColor : Colors.black,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' / ${target.toInt()}g',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
 
-    // 3. 색상 로직 (빨간색이 아래에서 차오름)
-    Gradient? barGradient;
+        // 2. 가로 그래프 영역
+        SizedBox(
+          height: 12,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final totalWidth = constraints.maxWidth;
+              final targetPosition = totalWidth * 0.75; // 목표선 위치 (75% 지점)
 
-    if (percentage <= 100) {
-      // 100% 이하는 단색 (원래 색)
-      barGradient = null;
-    } else if (percentage >= 200) {
-      // 200% 이상은 전체 빨강
-      barGradient = const LinearGradient(
-        colors: [Colors.red, Colors.red],
-        begin: Alignment.bottomCenter,
-        end: Alignment.topCenter,
-      );
-    } else {
-      // 🔥 100% ~ 200% 구간: 빨간색 게이지가 바닥부터 차오름
-      // redRatio: 0.0(100%일 때) ~ 1.0(200%일 때)
-      double redRatio = (percentage - 100) / 100;
+              double barWidth = targetPosition * percentage;
+              if (barWidth > totalWidth) barWidth = totalWidth;
 
-      barGradient = LinearGradient(
-        // 색상 배치: [빨강, 빨강, 원래색, 원래색]
-        // 이렇게 같은 색을 반복해서 배치하면 그라데이션 없이 딱 잘린 색이 나옵니다.
-        colors: [
-          Colors.red, // 바닥
-          Colors.red, // 빨간색 끝나는 지점
-          color, // 원래색 시작 지점
-          color, // 꼭대기
-        ],
-        stops: [
-          0.0,
-          redRatio, // 여기까지 빨간색
-          redRatio, // 여기서부터 원래 색 (경계선이 칼같이 나뉨)
-          1.0,
-        ],
-        begin: Alignment.bottomCenter, // 아래에서
-        end: Alignment.topCenter, // 위로
-      );
-    }
+              return Stack(
+                children: [
+                  // A. 배경 트랙
+                  Container(
+                    width: totalWidth,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
 
-    return BarChartGroupData(
-      x: x,
-      barRods: [
-        BarChartRodData(
-          toY: barHeight,
-          // 그라데이션이 있으면 사용, 없으면 단색 사용
-          color: barGradient == null ? color : null,
-          gradient: barGradient,
-          width: 20,
-          borderRadius: BorderRadius.circular(4),
-          backDrawRodData: BackgroundBarChartRodData(
-            show: true,
-            toY: 100,
-            color: Colors.grey[200],
+                  // B. 실제 섭취량 막대
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeOutExpo,
+                    width: barWidth,
+                    decoration: BoxDecoration(
+                      // 🟢 초과 시 그래프 바 색상을 빨갛게 변경
+                      // 초과하면 불투명하게(1.0), 아니면 약간 투명하게(0.7)
+                      color: finalColor.withOpacity(isOver ? 1.0 : 0.7),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+
+                  // C. 목표 기준선 (점선)
+                  Positioned(
+                    left: targetPosition,
+                    top: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 2,
+                      color: Colors.black12,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ],
