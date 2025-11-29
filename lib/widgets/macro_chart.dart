@@ -1,4 +1,3 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 class MacroChart extends StatelessWidget {
@@ -6,76 +5,121 @@ class MacroChart extends StatelessWidget {
   final double protein, targetProtein;
   final double fat, targetFat;
 
-  const MacroChart({
+  // 🟢 [신규] 초과 시 적용할 강렬한 빨간색 정의
+  final Color warningColor = Colors.redAccent[700]!;
+
+  MacroChart({
     super.key,
-    required this.carbs, required this.targetCarbs,
-    required this.protein, required this.targetProtein,
-    required this.fat, required this.targetFat,
+    required this.carbs,
+    required this.targetCarbs,
+    required this.protein,
+    required this.targetProtein,
+    required this.fat,
+    required this.targetFat,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 200,
-      child: BarChart(
-        BarChartData(
-          alignment: BarChartAlignment.spaceAround,
-          maxY: _calculateMaxY(), // 그래프 최대 높이 자동 계산
-          barTouchData: BarTouchData(enabled: false), // 터치 효과 끄기
-          titlesData: FlTitlesData(
-            show: true,
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                getTitlesWidget: (double value, TitleMeta meta) {
-                  const style = TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14);
-                  switch (value.toInt()) {
-                    case 0: return const Text('탄수화물', style: style);
-                    case 1: return const Text('단백질', style: style);
-                    case 2: return const Text('지방', style: style);
-                    default: return const Text('');
-                  }
-                },
-              ),
-            ),
-            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)), // 왼쪽 수치 숨김
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          ),
-          borderData: FlBorderData(show: false),
-          gridData: const FlGridData(show: false),
-          barGroups: [
-            _makeBarGroup(0, carbs, targetCarbs, Colors.green), // 탄수화물
-            _makeBarGroup(1, protein, targetProtein, Colors.orange), // 단백질
-            _makeBarGroup(2, fat, targetFat, Colors.redAccent), // 지방
-          ],
-        ),
-      ),
+    return Column(
+      children: [
+        // 각 영양소별로 바 생성 (기본 색상 전달)
+        _buildHorizontalBar("탄수화물", carbs, targetCarbs, Color(0x66DB6A)),
+        const SizedBox(height: 20),
+        _buildHorizontalBar("단백질", protein, targetProtein, Color(0xFF7043)),
+        const SizedBox(height: 20),
+        _buildHorizontalBar("지방", fat, targetFat, Color(0xFDA935)),
+      ],
     );
   }
 
-  // 그래프의 최대 Y축 값을 목표치 중 가장 큰 값 + 20% 여유분으로 설정
-  double _calculateMaxY() {
-    double maxVal = targetCarbs;
-    if (targetProtein > maxVal) maxVal = targetProtein;
-    if (targetFat > maxVal) maxVal = targetFat;
-    return maxVal * 1.2;
-  }
+  Widget _buildHorizontalBar(String label, double current, double target, Color baseColor) {
+    // 퍼센트 계산 및 초과 여부 확인
+    double percentage = target > 0 ? current / target : 0;
+    bool isOver = percentage > 1.2;
 
-  // 개별 막대 생성 함수
-  BarChartGroupData _makeBarGroup(int x, double current, double target, Color color) {
-    return BarChartGroupData(
-      x: x,
-      barRods: [
-        BarChartRodData(
-          toY: current, // 현재 섭취량
-          color: color,
-          width: 20,
-          borderRadius: BorderRadius.circular(4),
-          backDrawRodData: BackgroundBarChartRodData(
-            show: true,
-            toY: target, // 목표량 (회색 배경으로 표시)
-            color: Colors.grey[200],
+    // 초과 여부에 따라 최종 표시 색상 결정
+    Color finalColor = isOver ? warningColor : baseColor;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. 라벨 및 수치 텍스트
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            RichText(
+              text: TextSpan(
+                style: const TextStyle(color: Colors.black, fontSize: 12),
+                children: [
+                  TextSpan(
+                    text: '${current.toInt()}g',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      // 🟢 초과 시 글자 색상을 빨갛게 변경
+                      // (초과 안 했을 땐 검은색 유지)
+                      color: isOver ? finalColor : Colors.black,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' / ${target.toInt()}g',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        // 2. 가로 그래프 영역
+        SizedBox(
+          height: 12,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final totalWidth = constraints.maxWidth;
+              final targetPosition = totalWidth * 0.75; // 목표선 위치 (75% 지점)
+
+              double barWidth = targetPosition * percentage;
+              if (barWidth > totalWidth) barWidth = totalWidth;
+
+              return Stack(
+                children: [
+                  // A. 배경 트랙
+                  Container(
+                    width: totalWidth,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+
+                  // B. 실제 섭취량 막대
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeOutExpo,
+                    width: barWidth,
+                    decoration: BoxDecoration(
+                      // 🟢 초과 시 그래프 바 색상을 빨갛게 변경
+                      // 초과하면 불투명하게(1.0), 아니면 약간 투명하게(0.7)
+                      color: finalColor.withOpacity(isOver ? 1.0 : 0.7),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+
+                  // C. 목표 기준선 (점선)
+                  Positioned(
+                    left: targetPosition,
+                    top: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 2,
+                      color: Colors.black12,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ],
