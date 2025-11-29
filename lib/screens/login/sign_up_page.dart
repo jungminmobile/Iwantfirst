@@ -414,9 +414,9 @@ class _SignUpPageState extends State<SignUpPage> {
   Widget _buildGoalSelector() {
     return Row(
       children: [
-        Expanded(child: _buildGoalButton('유지')),
-        const SizedBox(width: 10),
         Expanded(child: _buildGoalButton('체중 감소')),
+        const SizedBox(width: 10),
+        Expanded(child: _buildGoalButton('유지')),
         const SizedBox(width: 10),
         Expanded(child: _buildGoalButton('근육량 증가')),
       ],
