@@ -116,5 +116,8 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon" # 안드로이드 아이콘 이름 설정
   ios: true # iOS 아이콘 생성 활성화
-  image_path: "lib/assets/icon/icon_jikmuk.png" # 아까 넣어둔 이미지 경로
+  image_path: "lib/assets/icon/icon_jikmuk.png"
+  image_path_ios: "lib/assets/icon/icon_jikmuk.png" # iOS는 여백 자른 원본 사용
+  adaptive_icon_background: "#FFFFFF" # 배경을 이미지 대신 흰색 코드로 지정
+  adaptive_icon_foreground: "lib/assets/icon/icon_jikmuk.png"
   min_sdk_android: 21 # 최신 안드로이드 지원을 위해 권장
