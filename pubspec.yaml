@@ -46,10 +46,13 @@ dependencies:
   image_picker: ^1.2.1
 
   # UI & 유틸
-  fl_chart: ^0.68.0
-  intl: ^0.19.0
-  table_calendar: ^3.1.2
+  fl_chart: ^1.1.1
+  intl: ^0.20.2
+  table_calendar: ^3.2.0
   flutter_spinkit: ^5.2.1
+  shared_preferences: ^2.5.3
+  focus_detector: ^2.0.1
+  video_player: ^2.10.1
 
 dev_dependencies:
   flutter_test:
@@ -61,6 +64,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -103,3 +107,18 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+  fonts:
+    - family: Suite
+      fonts:
+        - asset: lib/assets/fonts/SUITE-Regular.ttf
+  assets:
+    - lib/assets/icon/
+
+flutter_launcher_icons:
+  android: "launcher_icon" # 안드로이드 아이콘 이름 설정
+  ios: true # iOS 아이콘 생성 활성화
+  image_path: "lib/assets/icon/icon_jikmuk.png"
+  image_path_ios: "lib/assets/icon/icon_jikmuk.png" # iOS는 여백 자른 원본 사용
+  adaptive_icon_background: "#FFFFFF" # 배경을 이미지 대신 흰색 코드로 지정
+  adaptive_icon_foreground: "lib/assets/icon/icon_jikmuk.png"
+  min_sdk_android: 21 # 최신 안드로이드 지원을 위해 권장

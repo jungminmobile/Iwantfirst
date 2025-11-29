@@ -4,6 +4,7 @@ import 'camera_screen.dart';
 import 'stats_screen.dart';
 import 'login/login_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hackton_2025_2/screens/setting/settings_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -21,6 +22,7 @@ class _MainScreenState extends State<MainScreen> {
     const HomeScreen(),   // 0번
     const CameraScreen(), // 1번
     const StatsScreen(),  // 2번
+    const SettingsScreen(), // 3번
   ];
 
   // 탭을 눌렀을 때 실행되는 함수
@@ -30,57 +32,22 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
   //로그인 로그아웃을 하기위한 임시 코드
-  void _logout() async {
-    try {
-      // 1. FIREBASE에서 현재 사용자 로그아웃을 처리하는 코드는 이것 하나로 충분합니다.
-      await FirebaseAuth.instance.signOut();
-      print('Firebase 로그아웃 성공');
 
-      // 2. 🌟 Navigator 코드는 제거합니다. 🌟
-      // 로그아웃이 성공하면 StreamBuilder가 자동으로 LoginPage로 전환합니다.
-
-      if (mounted) {
-        // (선택 사항) 사용자에게 로그아웃 성공 메시지를 표시할 수 있습니다.
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('로그아웃되었습니다.')),
-        );
-      }
-
-    } catch (e) {
-      print('로그아웃 오류: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('로그아웃에 실패했습니다: $e')),
-        );
-      }
-    }
-  }
 
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      //로그아웃 버튼 임시로 만든것
-      appBar: AppBar(
-        title: const Text('앱 이름'), // 앱 제목
-        actions: [
-          // 임시 로그아웃 버튼
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout, // 로그아웃 함수 연결
-            tooltip: '로그아웃',
-          ),
-        ],
+      body: IndexedStack(
+        index: _selectedIndex, // 현재 보여줄 화면 번호
+        children: _screens,    // 미리 만들어둔 화면 리스트
       ),
-      
-      // 현재 선택된 인덱스에 맞는 화면을 보여줌
-      body: _screens[_selectedIndex],
 
       // 하단 네비게이션 바
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: _onItemTapped,
-        indicatorColor: Colors.green.shade200, // 선택된 탭 배경색
+        indicatorColor: Color(0x4444FF33), // 선택된 탭 배경색
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -97,6 +64,11 @@ class _MainScreenState extends State<MainScreen> {
             selectedIcon: Icon(Icons.bar_chart),
             label: '통계',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: '설정',
+          )
         ],
       ),
     );

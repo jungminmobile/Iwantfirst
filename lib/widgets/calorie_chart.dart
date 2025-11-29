@@ -9,47 +9,101 @@ class CalorieChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 남은 칼로리 계산 (음수가 되지 않도록 처리)
-    final double remaining = (target - current).clamp(0, target);
+    bool isOver = target > 0 && current > target;
+    double remaining = (target - current).clamp(0, target);
+    double excess = (current - target).clamp(0, target);
+    double transparentSection = target - excess;
+
+    // 🟢 [수정됨] 끊김 없는 루프 그라데이션
+    const Gradient simpleNeonGradient = SweepGradient(
+      center: Alignment.center,
+      startAngle: 0.0,
+      endAngle: 3.14 * 2,
+      colors: [
+        Colors.cyanAccent,
+        Colors.greenAccent,
+        Colors.cyanAccent, // 🟢 시작 색상과 동일하게 마무리
+      ],
+      stops: [0.0, 0.5, 1.0],
+      transform: GradientRotation(-3.14 / 2),
+    );
 
     return SizedBox(
       height: 200,
       child: Stack(
         children: [
+          // 1층: 베이스 차트
           PieChart(
             PieChartData(
-              startDegreeOffset: 270, // 12시 방향부터 시작
+              startDegreeOffset: 270,
               sectionsSpace: 0,
-              centerSpaceRadius: 70, // 도넛 모양으로 만들기 위해 중앙 비우기
-              sections: [
-                // 섭취한 칼로리 (색상 표시)
+              centerSpaceRadius: 70,
+              sections: isOver
+                  ? [
                 PieChartSectionData(
-                  color: Colors.blueAccent,
-                  value: current,
-                  title: '',
+                  gradient: simpleNeonGradient,
+                  value: 1,
                   radius: 20,
                   showTitle: false,
                 ),
-                // 남은 칼로리 (회색 표시)
+              ]
+                  : [
                 PieChartSectionData(
-                  color: Colors.grey[200],
+                  gradient: simpleNeonGradient,
+                  value: current,
+                  radius: 20,
+                  showTitle: false,
+                ),
+                PieChartSectionData(
+                  color: Colors.grey[100],
                   value: remaining,
-                  title: '',
                   radius: 20,
                   showTitle: false,
                 ),
               ],
             ),
           ),
-          // 그래프 중앙에 텍스트 표시
+
+          // 2층: 초과분 오버레이
+          if (isOver)
+            PieChart(
+              PieChartData(
+                startDegreeOffset: 270,
+                sectionsSpace: 0,
+                centerSpaceRadius: 70,
+                sections: [
+                  PieChartSectionData(
+                    color: Colors.redAccent.withOpacity(0.9),
+                    value: excess,
+                    radius: 25,
+                    showTitle: false,
+                  ),
+                  PieChartSectionData(
+                    color: Colors.transparent,
+                    value: transparentSection,
+                    radius: 20,
+                    showTitle: false,
+                  ),
+                ],
+              ),
+            ),
+
+          // 중앙 텍스트
           Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('오늘 섭취', style: TextStyle(fontSize: 14, color: Colors.grey)),
+                Text(
+                  isOver ? '⚠️ 목표 초과' : '오늘 섭취',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isOver ? Colors.red : Colors.grey,
+                    fontWeight: isOver ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
                 Text(
                   '${current.toInt()} kcal',
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
                 Text(
                   '/ ${target.toInt()} kcal',
