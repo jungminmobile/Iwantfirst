@@ -2,6 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// ★ 1. 조언자 정보 모델 클래스 정의
+class AdvisorInfo {
+  final String key; // 저장용 (영어)
+  final String name; // 표시용 (한글)
+
+  AdvisorInfo({required this.key, required this.name});
+}
+
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
 
@@ -35,6 +43,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _isLoading = true;
   final User? currentUser = FirebaseAuth.instance.currentUser;
 
+  // ★ 2. 조언자 정보 리스트와 선택된 조언자 변수 선언
+  final List<AdvisorInfo> _advisors = [
+    AdvisorInfo(key: 'trainer', name: '트레이너'),
+    AdvisorInfo(key: 'boyfriend', name: '남자친구'),
+    AdvisorInfo(key: 'girlfriend', name: '여자친구'),
+    AdvisorInfo(key: 'mother', name: '엄마'),
+  ];
+  String _selectedAdvisor = 'trainer'; // 기본값 설정
+
   // --- 권장 섭취량 저장 변수 ---
   int? _recommendedCalories;
   int? _recommendedCarbs;
@@ -57,11 +74,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void initState() {
     super.initState();
     _loadUserData();
-
     _heightController.addListener(_calculateRecommendations);
     _weightController.addListener(_calculateRecommendations);
     _ageController.addListener(_calculateRecommendations);
-
     _calorieFocusNode.addListener(() => setState(() {}));
     _carbsFocusNode.addListener(() => setState(() {}));
     _proteinFocusNode.addListener(() => setState(() {}));
@@ -73,7 +88,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _heightController.removeListener(_calculateRecommendations);
     _weightController.removeListener(_calculateRecommendations);
     _ageController.removeListener(_calculateRecommendations);
-
     _nameController.dispose();
     _heightController.dispose();
     _weightController.dispose();
@@ -82,7 +96,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _targetCarbsController.dispose();
     _targetProteinController.dispose();
     _targetFatController.dispose();
-
     _calorieFocusNode.dispose();
     _carbsFocusNode.dispose();
     _proteinFocusNode.dispose();
@@ -90,6 +103,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
+  // ★ 3. _loadUserData() 함수에 조언자 정보 로드 로직 추가
   Future<void> _loadUserData() async {
     if (currentUser == null) {
       if (mounted) setState(() => _isLoading = false);
@@ -111,6 +125,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               (profileData['weight'] as num?)?.toString() ?? '';
           _ageController.text = (profileData['age'] as num?)?.toString() ?? '';
           _selectedGender = profileData['gender'] ?? '남성';
+
+          // 👇👇👇 저장된 advisor 값을 불러와 상태 업데이트
+          _selectedAdvisor = profileData['advisor'] ?? 'trainer';
         }
         if (data.containsKey('goals')) {
           final goalsData = data['goals'] as Map<String, dynamic>;
@@ -135,26 +152,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   void _calculateRecommendations() {
+    // (기존과 동일, 수정 없음)
     final double? height = double.tryParse(_heightController.text);
     final double? weight = double.tryParse(_weightController.text);
     final int? age = int.tryParse(_ageController.text);
-    final double activityFactor = _activityFactors[_selectedActivity]!;
-
-    if (height == null ||
-        height <= 0 ||
-        weight == null ||
-        weight <= 0 ||
-        age == null ||
-        age <= 0) {
+    if (height == null || height <= 0 || weight == null || weight <= 0 || age == null || age <= 0) {
       setState(() {
-        _recommendedCalories = null;
-        _recommendedCarbs = null;
-        _recommendedProtein = null;
-        _recommendedFat = null;
+        _recommendedCalories = null; _recommendedCarbs = null; _recommendedProtein = null; _recommendedFat = null;
       });
       return;
     }
-
+    final double activityFactor = _activityFactors[_selectedActivity]!;
     double bmr;
     if (_selectedGender == '남성') {
       bmr = (10 * weight) + (6.25 * height) - (5 * age) + 5;
@@ -162,29 +170,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       bmr = (10 * weight) + (6.25 * height) - (5 * age) - 161;
     }
     double tdee = bmr * activityFactor;
-
-    double finalKcal;
-    double proteinG, carbG, fatG;
-    double fatRatio;
-
+    double finalKcal, proteinG, carbG, fatG, fatRatio;
     if (_selectedGoal == '유지') {
-      finalKcal = tdee;
-      proteinG = weight * 1.1;
-      fatRatio = 0.25;
+      finalKcal = tdee; proteinG = weight * 1.1; fatRatio = 0.25;
     } else if (_selectedGoal == '체중 감소') {
-      finalKcal = tdee - 300;
-      proteinG = weight * 1.3;
-      fatRatio = 0.25;
+      finalKcal = tdee - 300; proteinG = weight * 1.3; fatRatio = 0.25;
     } else {
-      finalKcal = tdee + 200;
-      proteinG = weight * 1.5;
-      fatRatio = 0.20;
+      finalKcal = tdee + 200; proteinG = weight * 1.5; fatRatio = 0.20;
     }
-
     fatG = (finalKcal * fatRatio) / 9;
     double carbKcal = finalKcal - (proteinG * 4) - (fatG * 9);
     carbG = carbKcal / 4;
-
     setState(() {
       _recommendedCalories = finalKcal.round();
       _recommendedCarbs = carbG.round();
@@ -193,6 +189,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     });
   }
 
+  // ★ 4. _saveProfile() 함수에 조언자 정보 저장 로직 추가
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate() || currentUser == null) return;
     setState(() => _isLoading = true);
@@ -205,22 +202,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           'weight': double.tryParse(_weightController.text.trim()) ?? 0.0,
           'age': int.tryParse(_ageController.text.trim()) ?? 0,
           'gender': _selectedGender,
+          // 👇👇👇 수정한 조언자 정보(영어 key)를 함께 저장
+          'advisor': _selectedAdvisor,
         },
         'goals': {
           'target_calories':
-              int.tryParse(_targetCaloriesController.text.trim()) ??
+          int.tryParse(_targetCaloriesController.text.trim()) ??
               _recommendedCalories ??
               0,
           'target_carbs':
-              int.tryParse(_targetCarbsController.text.trim()) ??
+          int.tryParse(_targetCarbsController.text.trim()) ??
               _recommendedCarbs ??
               0,
           'target_protein':
-              int.tryParse(_targetProteinController.text.trim()) ??
+          int.tryParse(_targetProteinController.text.trim()) ??
               _recommendedProtein ??
               0,
-          'target_fat':
-              int.tryParse(_targetFatController.text.trim()) ??
+          'target_fat': int.tryParse(_targetFatController.text.trim()) ??
               _recommendedFat ??
               0,
           'user_goal': _selectedGoal,
@@ -234,32 +232,28 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           .set(updatedData, SetOptions(merge: true));
 
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('정보가 저장되었습니다.')));
+        ScaffoldMessenger.of(context,)
+            .showSnackBar(const SnackBar(content: Text('정보가 저장되었습니다.')));
         Navigator.of(context).pop();
       }
     } catch (e) {
       print("프로필 저장 오류: $e");
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('오류가 발생했습니다: $e')));
+        ScaffoldMessenger.of(context,)
+            .showSnackBar(SnackBar(content: Text('오류가 발생했습니다: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  // ★ 5. build() 함수에 조언자 선택 UI 추가
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _backgroundColor,
       appBar: AppBar(
-        title: const Text(
-          '프로필 수정',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-        ),
+        title: const Text('프로필 수정', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
         centerTitle: true,
         backgroundColor: _backgroundColor,
         elevation: 0,
@@ -271,442 +265,154 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(20.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSectionHeader("기본 정보"),
-                    const SizedBox(height: 15),
-                    _buildSectionCard(
+        padding: const EdgeInsets.all(20.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionHeader("기본 정보"),
+              const SizedBox(height: 15),
+              _buildSectionCard(
+                children: [
+                  _buildTextField("이름", _nameController, icon: Icons.person_outline),
+                  const SizedBox(height: 20),
+                  Row(children: [
+                    Expanded(child: _buildTextField("키", _heightController, suffix: "cm", isNumber: true)),
+                    const SizedBox(width: 15),
+                    Expanded(child: _buildTextField("몸무게", _weightController, suffix: "kg", isNumber: true)),
+                  ]),
+                  const SizedBox(height: 20),
+                  Row(children: [
+                    Expanded(child: _buildTextField("나이", _ageController, suffix: "세", isNumber: true)),
+                    const SizedBox(width: 15),
+                    Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildTextField(
-                          "이름",
-                          _nameController,
-                          icon: Icons.person_outline,
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildTextField(
-                                "키",
-                                _heightController,
-                                suffix: "cm",
-                                isNumber: true,
-                              ),
-                            ),
-                            const SizedBox(width: 15),
-                            Expanded(
-                              child: _buildTextField(
-                                "몸무게",
-                                _weightController,
-                                suffix: "kg",
-                                isNumber: true,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildTextField(
-                                "나이",
-                                _ageController,
-                                suffix: "세",
-                                isNumber: true,
-                              ),
-                            ),
-                            const SizedBox(width: 15),
-
-                            // 🔥 [수정됨] 나이 옆 빈 공간에 성별 드롭다운 배치
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildSubHeader("성별"),
-                                  const SizedBox(height: 8),
-                                  _buildGenderDropdown(), // 드롭다운 위젯 호출
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        // 원래 있던 성별 버튼 UI 삭제됨
+                        _buildSubHeader("성별"),
+                        const SizedBox(height: 8),
+                        _buildGenderDropdown(),
                       ],
-                    ),
+                    )),
+                  ]),
+                ],
+              ),
+              const SizedBox(height: 30),
 
-                    const SizedBox(height: 30),
-                    _buildSectionHeaderWithHint(),
-                    const SizedBox(height: 15),
-                    _buildSectionCard(
-                      children: [
-                        _buildSubHeader("나의 활동량"),
-                        const SizedBox(height: 10),
-                        _buildActivitySelector(),
-                        const SizedBox(height: 20),
-                        _buildSubHeader("나의 목표"),
-                        const SizedBox(height: 10),
-                        _buildGoalSelector(),
-                        const SizedBox(height: 20),
-                        const Divider(),
-                        const SizedBox(height: 20),
-                        _buildTextField(
-                          "목표 칼로리",
-                          _targetCaloriesController,
-                          suffix: "kcal",
-                          isNumber: true,
-                          focusNode: _calorieFocusNode,
-                          placeholder: _recommendedCalories?.toString(),
-                        ),
-                        const SizedBox(height: 20),
-                        _buildTextField(
-                          "목표 탄수화물",
-                          _targetCarbsController,
-                          suffix: "g",
-                          isNumber: true,
-                          focusNode: _carbsFocusNode,
-                          placeholder: _recommendedCarbs?.toString(),
-                        ),
-                        const SizedBox(height: 20),
-                        _buildTextField(
-                          "목표 단백질",
-                          _targetProteinController,
-                          suffix: "g",
-                          isNumber: true,
-                          focusNode: _proteinFocusNode,
-                          placeholder: _recommendedProtein?.toString(),
-                        ),
-                        const SizedBox(height: 20),
-                        _buildTextField(
-                          "목표 지방",
-                          _targetFatController,
-                          suffix: "g",
-                          isNumber: true,
-                          focusNode: _fatFocusNode,
-                          placeholder: _recommendedFat?.toString(),
-                        ),
-                      ],
+              // 👇👇👇 조언자 수정 섹션 (새로 추가) 👇👇👇
+              _buildSectionHeader("나의 조언자"),
+              const SizedBox(height: 15),
+              _buildSectionCard(
+                children: [
+                  _buildSubHeader("식단 피드백을 제공할 AI 조언자를 선택해주세요."),
+                  const SizedBox(height: 15),
+                  _buildAdvisorTextSelector(), // 조언자 선택 위젯 호출
+                ],
+              ),
+
+              const SizedBox(height: 30),
+              _buildSectionHeaderWithHint(),
+              const SizedBox(height: 15),
+              _buildSectionCard(
+                children: [
+                  _buildSubHeader("나의 활동량"),
+                  const SizedBox(height: 10),
+                  _buildActivitySelector(),
+                  const SizedBox(height: 20),
+                  _buildSubHeader("나의 목표"),
+                  const SizedBox(height: 10),
+                  _buildGoalSelector(),
+                  const SizedBox(height: 20),
+                  const Divider(),
+                  const SizedBox(height: 20),
+                  _buildTextField("목표 칼로리", _targetCaloriesController, suffix: "kcal", isNumber: true, focusNode: _calorieFocusNode, placeholder: _recommendedCalories?.toString()),
+                  const SizedBox(height: 20),
+                  _buildTextField("목표 탄수화물", _targetCarbsController, suffix: "g", isNumber: true, focusNode: _carbsFocusNode, placeholder: _recommendedCarbs?.toString()),
+                  const SizedBox(height: 20),
+                  _buildTextField("목표 단백질", _targetProteinController, suffix: "g", isNumber: true, focusNode: _proteinFocusNode, placeholder: _recommendedProtein?.toString()),
+                  const SizedBox(height: 20),
+                  _buildTextField("목표 지방", _targetFatController, suffix: "g", isNumber: true, focusNode: _fatFocusNode, placeholder: _recommendedFat?.toString()),
+                ],
+              ),
+              const SizedBox(height: 40),
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
+                  onPressed: _saveProfile,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    const SizedBox(height: 40),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        onPressed: _saveProfile,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          "저장하기",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+                    elevation: 0,
+                  ),
+                  child: const Text("저장하기", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
-            ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   // --- 위젯 빌더 함수들 ---
-  Widget _buildSectionHeader(String title) => Text(
-    title,
-    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-  );
+  Widget _buildSectionHeader(String title) => Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold));
+  Widget _buildSubHeader(String title) => Text(title, style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold));
+  Widget _buildSectionHeaderWithHint() { return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_buildSectionHeader("목표 설정"), if (_recommendedCalories != null) Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: _primaryColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)), child: Text("권장: $_recommendedCalories kcal", style: TextStyle(fontSize: 12, color: Colors.green[800], fontWeight: FontWeight.bold)))]); }
+  Widget _buildSectionCard({required List<Widget> children}) { return Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))]), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children)); }
+  Widget _buildTextField(String label, TextEditingController controller, {String? suffix, bool isNumber = false, IconData? icon, FocusNode? focusNode, String? placeholder}) { return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_buildSubHeader(label), if (placeholder != null && controller.text.isEmpty && focusNode != null && focusNode.hasFocus) Text("권장: $placeholder", style: TextStyle(fontSize: 12, color: Colors.green[700]))]), const SizedBox(height: 8), TextFormField(controller: controller, focusNode: focusNode, keyboardType: isNumber ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), decoration: InputDecoration(filled: true, fillColor: Colors.grey[100], prefixIcon: icon != null ? Icon(icon, color: Colors.grey[600]) : null, suffixText: suffix, suffixStyle: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold), contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black, width: 1.5))), validator: (v) => (v == null || v.isEmpty) ? '입력해주세요' : null)]); }
+  Widget _buildGenderDropdown() { return DropdownButtonFormField<String>(value: _selectedGender, items: ['남성', '여성'].map((String gender) { return DropdownMenuItem<String>(value: gender, child: Text(gender, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))); }).toList(), onChanged: (String? newValue) { if (newValue != null) { setState(() => _selectedGender = newValue); _calculateRecommendations(); } }, decoration: InputDecoration(filled: true, fillColor: Colors.grey[100], contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black, width: 1.5))), icon: const Icon(Icons.arrow_drop_down, color: Colors.grey), dropdownColor: Colors.white); }
+  Widget _buildGoalSelector() { return Row(children: [Expanded(child: _buildGoalButton('체중 감소')), const SizedBox(width: 10), Expanded(child: _buildGoalButton('유지')), const SizedBox(width: 10), Expanded(child: _buildGoalButton('근육량 증가'))]); }
+  Widget _buildGoalButton(String goal) { bool isSelected = _selectedGoal == goal; return GestureDetector(onTap: () { setState(() => _selectedGoal = goal); _calculateRecommendations(); }, child: AnimatedContainer(duration: const Duration(milliseconds: 200), padding: const EdgeInsets.symmetric(vertical: 14), decoration: BoxDecoration(color: isSelected ? Colors.black : Colors.grey[100], borderRadius: BorderRadius.circular(12)), alignment: Alignment.center, child: Text(goal, style: TextStyle(color: isSelected ? Colors.white : Colors.grey[700], fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center))); }
+  Widget _buildActivitySelector() { final Map<String, String> activityDescriptions = {'매우 비활동적': '운동 거의 안함', '가벼운 활동': '주 1-3회 운동', '중간 활동': '주 3-5회 운동', '고활동': '주 6-7회 운동', '매우 고활동': '매일, 하루 2번'}; return Column(children: [Row(children: [Expanded(child: _buildActivityButton('매우 비활동적', activityDescriptions['매우 비활동적']!)), const SizedBox(width: 10), Expanded(child: _buildActivityButton('가벼운 활동', activityDescriptions['가벼운 활동']!)), const SizedBox(width: 10), Expanded(child: _buildActivityButton('중간 활동', activityDescriptions['중간 활동']!))]), const SizedBox(height: 10), Row(children: [Expanded(child: _buildActivityButton('고활동', activityDescriptions['고활동']!)), const SizedBox(width: 10), Expanded(child: _buildActivityButton('매우 고활동', activityDescriptions['매우 고활동']!))])]); }
+  Widget _buildActivityButton(String activityLevel, String description) { bool isSelected = _selectedActivity == activityLevel; return GestureDetector(onTap: () { setState(() => _selectedActivity = activityLevel); _calculateRecommendations(); }, child: AnimatedContainer(duration: const Duration(milliseconds: 200), padding: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: isSelected ? Colors.black : Colors.grey[100], borderRadius: BorderRadius.circular(12)), alignment: Alignment.center, child: Text(description, style: TextStyle(color: isSelected ? Colors.white : Colors.grey[700], fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center))); }
 
-  Widget _buildSubHeader(String title) => Text(
-    title,
-    style: const TextStyle(
-      fontSize: 14,
-      color: Colors.grey,
-      fontWeight: FontWeight.bold,
-    ),
-  );
-
-  Widget _buildSectionHeaderWithHint() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        _buildSectionHeader("목표 설정"),
-        if (_recommendedCalories != null)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: _primaryColor.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              "권장: $_recommendedCalories kcal",
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.green[800],
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildSectionCard({required List<Widget> children}) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: children,
-      ),
-    );
-  }
-
-  Widget _buildTextField(
-    String label,
-    TextEditingController controller, {
-    String? suffix,
-    bool isNumber = false,
-    IconData? icon,
-    FocusNode? focusNode,
-    String? placeholder,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _buildSubHeader(label),
-            if (placeholder != null &&
-                controller.text.isEmpty &&
-                focusNode != null &&
-                focusNode.hasFocus)
-              Text(
-                "권장: $placeholder",
-                style: TextStyle(fontSize: 12, color: Colors.green[700]),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          focusNode: focusNode,
-          keyboardType: isNumber
-              ? const TextInputType.numberWithOptions(decimal: true)
-              : TextInputType.text,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: Colors.grey[100],
-            prefixIcon: icon != null
-                ? Icon(icon, color: Colors.grey[600])
-                : null,
-            suffixText: suffix,
-            suffixStyle: const TextStyle(
-              color: Colors.grey,
-              fontWeight: FontWeight.bold,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              vertical: 16,
-              horizontal: 16,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.black, width: 1.5),
-            ),
-          ),
-          validator: (v) => (v == null || v.isEmpty) ? '입력해주세요' : null,
-        ),
-      ],
-    );
-  }
-
-  // 🔥 [신규] 성별 선택 드롭다운 위젯 (텍스트필드 스타일과 통일)
-  Widget _buildGenderDropdown() {
-    return DropdownButtonFormField<String>(
-      value: _selectedGender,
-      items: ['남성', '여성'].map((String gender) {
-        return DropdownMenuItem<String>(
-          value: gender,
-          child: Text(
-            gender,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-        );
-      }).toList(),
-      onChanged: (String? newValue) {
-        if (newValue != null) {
-          setState(() => _selectedGender = newValue);
-          _calculateRecommendations();
-        }
-      },
-      decoration: InputDecoration(
-        filled: true,
-        fillColor: Colors.grey[100], // 텍스트 필드와 같은 배경색
-        contentPadding: const EdgeInsets.symmetric(
-          vertical: 16,
-          horizontal: 16,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.black, width: 1.5),
-        ),
-      ),
-      icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
-      dropdownColor: Colors.white, // 드롭다운 메뉴 배경색
-    );
-  }
-
-  Widget _buildGoalSelector() {
-    return Row(
-      children: [
-        Expanded(child: _buildGoalButton('체중 감소')),
-        const SizedBox(width: 10),
-        Expanded(child: _buildGoalButton('유지')),
-        const SizedBox(width: 10),
-        Expanded(child: _buildGoalButton('근육량 증가')),
-      ],
-    );
-  }
-
-  Widget _buildGoalButton(String goal) {
-    bool isSelected = _selectedGoal == goal;
-    return GestureDetector(
-      onTap: () {
-        setState(() => _selectedGoal = goal);
-        _calculateRecommendations();
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.black : Colors.grey[100],
-          borderRadius: BorderRadius.circular(12),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          goal,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey[700],
-            fontWeight: FontWeight.bold,
-            fontSize: 12,
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActivitySelector() {
-    final Map<String, String> activityDescriptions = {
-      '매우 비활동적': '운동 거의 안함',
-      '가벼운 활동': '주 1-3회 운동',
-      '중간 활동': '주 3-5회 운동',
-      '고활동': '주 6-7회 운동',
-      '매우 고활동': '매일, 하루 2번',
-    };
-
+  // ★ 6. 조언자 선택을 위한 새로운 텍스트 버튼 빌더 함수들
+  Widget _buildAdvisorTextSelector() {
     return Column(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildActivityButton(
-                '매우 비활동적',
-                activityDescriptions['매우 비활동적']!,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildActivityButton(
-                '가벼운 활동',
-                activityDescriptions['가벼운 활동']!,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildActivityButton(
-                '중간 활동',
-                activityDescriptions['중간 활동']!,
-              ),
-            ),
-          ],
-        ),
+        Row(children: [
+          Expanded(child: _buildAdvisorTextButton(_advisors[0])), // 트레이너
+          const SizedBox(width: 10),
+          Expanded(child: _buildAdvisorTextButton(_advisors[1])), // 남자친구
+        ]),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _buildActivityButton('고활동', activityDescriptions['고활동']!),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildActivityButton(
-                '매우 고활동',
-                activityDescriptions['매우 고활동']!,
-              ),
-            ),
-          ],
-        ),
+        Row(children: [
+          Expanded(child: _buildAdvisorTextButton(_advisors[2])), // 여자친구
+          const SizedBox(width: 10),
+          Expanded(child: _buildAdvisorTextButton(_advisors[3])), // 엄마
+        ]),
       ],
     );
   }
 
-  Widget _buildActivityButton(String activityLevel, String description) {
-    bool isSelected = _selectedActivity == activityLevel;
+  Widget _buildAdvisorTextButton(AdvisorInfo advisor) {
+    bool isSelected = _selectedAdvisor == advisor.key;
     return GestureDetector(
       onTap: () {
-        setState(() => _selectedActivity = activityLevel);
-        _calculateRecommendations();
+        setState(() {
+          _selectedAdvisor = advisor.key;
+        });
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
           color: isSelected ? Colors.black : Colors.grey[100],
           borderRadius: BorderRadius.circular(12),
         ),
         alignment: Alignment.center,
         child: Text(
-          description,
+          advisor.name, // UI에는 한글 이름 표시
           style: TextStyle(
             color: isSelected ? Colors.white : Colors.grey[700],
             fontWeight: FontWeight.bold,
-            fontSize: 12,
+            fontSize: 16,
           ),
-          textAlign: TextAlign.center,
         ),
       ),
     );

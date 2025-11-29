@@ -10,6 +10,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'edit_food_screen.dart';
 import '../services/gemini_service.dart';
 import '../services/database_service.dart';
+import '../utils/diet_notifier.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -164,7 +165,7 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  // 🔥 Firestore 데이터 삭제 함수 (초기화 버튼을 눌렀을 때만 사용)
+  // Firestore 데이터 삭제 함수 (초기화 버튼을 눌렀을 때만 사용)
   Future<void> _deleteMealFromDB(String mealType) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -184,6 +185,7 @@ class _CameraScreenState extends State<CameraScreen> {
           _savedMeals.remove(mealType);
           _isEditingMode[mealType] = false;
         });
+        DietNotifier.notify();
       }
     } catch (e) {
       print("DB 삭제 실패: $e");
@@ -422,6 +424,7 @@ class _CameraScreenState extends State<CameraScreen> {
         if (result == true) {
           // 저장이 완료되었을 때만 DB를 다시 불러오고, 임시 사진을 정리함
           _fetchFirebaseData();
+          DietNotifier.notify();
           setState(() {
             _isEditingMode[mealType] = false; // 수정 모드 종료
             // 🔥 분석 완료 후에도 사진과 텍스트를 유지하고 싶으면 아래 부분을 주석 처리하세요.
