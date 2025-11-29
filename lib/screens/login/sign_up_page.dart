@@ -47,12 +47,15 @@ class _SignUpPageState extends State<SignUpPage> {
   String _selectedActivity = '매우 비활동적';
   bool _isLoading = false;
 
-  // 조언자 정보 리스트와 선택된 조언자 변수 선언
+  // ★★★ 조언자 리스트에 '해병대' 추가 ★★★
   final List<AdvisorInfo> _advisors = [
     AdvisorInfo(key: 'trainer', name: '트레이너'),
     AdvisorInfo(key: 'boyfriend', name: '남자친구'),
     AdvisorInfo(key: 'girlfriend', name: '여자친구'),
     AdvisorInfo(key: 'mother', name: '엄마'),
+    AdvisorInfo(key: 'doctor', name: '의사'),
+    AdvisorInfo(key: 'mad_scientist', name: '미친 과학자 (Beta)'),
+    AdvisorInfo(key: 'marine', name: '해병대 (Beta)'), // 신규 추가
   ];
   String _selectedAdvisor = 'trainer'; // 기본값 설정
 
@@ -72,7 +75,6 @@ class _SignUpPageState extends State<SignUpPage> {
     '고활동': 1.725, '매우 고활동': 1.9,
   };
 
-  // initState, dispose, _calculateRecommendations 함수는 기존과 동일
   @override
   void initState() {
     super.initState();
@@ -142,7 +144,6 @@ class _SignUpPageState extends State<SignUpPage> {
     });
   }
 
-  // 가입 로직(_signUp)에 'advisor' 필드 저장 추가
   Future<void> _signUp() async {
     final name = _nameController.text.trim();
     final height = _heightController.text.trim();
@@ -152,7 +153,7 @@ class _SignUpPageState extends State<SignUpPage> {
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty || name.isEmpty || height.isEmpty || weight.isEmpty || age.isEmpty) {
-      ScaffoldMessenger.of(context,).showSnackBar(const SnackBar(content: Text('모든 정보를 입력해주세요.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('모든 정보를 입력해주세요.')));
       return;
     }
     setState(() { _isLoading = true; });
@@ -162,37 +163,29 @@ class _SignUpPageState extends State<SignUpPage> {
       final String uid = userCredential.user!.uid;
 
       await _firestore.collection(_userCollectionPath).doc(uid).set({
-        'account_info': {
-          'email': email,
-          'created_at': FieldValue.serverTimestamp(),
-        },
+        'account_info': { 'email': email, 'created_at': FieldValue.serverTimestamp(), },
         'profile': {
-          'name': name,
-          'height': double.tryParse(height) ?? 0.0,
-          'weight': double.tryParse(weight) ?? 0.0,
-          'age': int.tryParse(age) ?? 0,
-          'gender': _selectedGender,
-          'advisor': _selectedAdvisor, // <-- 선택한 조언자(영어 key) 저장
+          'name': name, 'height': double.tryParse(height) ?? 0.0, 'weight': double.tryParse(weight) ?? 0.0,
+          'age': int.tryParse(age) ?? 0, 'gender': _selectedGender, 'advisor': _selectedAdvisor,
         },
         'goals': {
           'target_calories': int.tryParse(_goalCalorieController.text.trim()) ?? _recommendedCalories ?? 2000,
           'target_carbs': int.tryParse(_goalCarbsController.text.trim()) ?? _recommendedCarbs ?? 0,
           'target_protein': int.tryParse(_goalProteinController.text.trim()) ?? _recommendedProtein ?? 0,
           'target_fat': int.tryParse(_goalFatController.text.trim()) ?? _recommendedFat ?? 0,
-          'user_goal': _selectedGoal,
-          'activity_level': _selectedActivity,
+          'user_goal': _selectedGoal, 'activity_level': _selectedActivity,
         },
       });
 
       await _auth.signOut();
       if (mounted) {
-        ScaffoldMessenger.of(context,).showSnackBar(const SnackBar(content: Text('회원가입 성공! 이제 로그인하세요.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('회원가입 성공! 이제 로그인하세요.')));
         Navigator.pop(context);
       }
     } on FirebaseAuthException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context,).showSnackBar(SnackBar(content: Text('회원가입 에러: ${e.message}')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('회원가입 에러: ${e.message}')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context,).showSnackBar(SnackBar(content: Text('알 수 없는 에러: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('알 수 없는 에러: $e')));
     } finally {
       if (mounted) setState(() { _isLoading = false; });
     }
@@ -224,9 +217,7 @@ class _SignUpPageState extends State<SignUpPage> {
                 const SizedBox(height: 20),
                 _buildTextField("비밀번호 (6자 이상)", _passwordController, icon: Icons.lock_outline, obscureText: true),
               ]),
-
               const SizedBox(height: 30),
-
               _buildSectionHeader("프로필 정보"),
               const SizedBox(height: 15),
               _buildSectionCard(children: [
@@ -244,29 +235,24 @@ class _SignUpPageState extends State<SignUpPage> {
                   Expanded(child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildSubHeader("성별"),
-                      const SizedBox(height: 8),
-                      _buildGenderDropdown(),
+                      _buildSubHeader("성별"), const SizedBox(height: 8), _buildGenderDropdown(),
                     ],
                   )),
                 ]),
               ]),
-
               const SizedBox(height: 30),
 
-              // ★★★ 조언자 선택 섹션을 하얀색 카드로 감싼 부분 ★★★
               _buildSectionHeader("나의 조언자 선택"),
               const SizedBox(height: 15),
               _buildSectionCard(
                 children: [
                   _buildSubHeader("식단 피드백을 제공할 AI 조언자를 선택해주세요."),
                   const SizedBox(height: 15),
-                  _buildAdvisorTextSelector(), // 조언자 선택 위젯 호출
+                  _buildAdvisorDropdown(), // 드롭다운 위젯 호출
                 ],
               ),
 
               const SizedBox(height: 30),
-
               _buildSectionHeaderWithHint(),
               const SizedBox(height: 15),
               _buildSectionCard(children: [
@@ -284,9 +270,7 @@ class _SignUpPageState extends State<SignUpPage> {
                 const SizedBox(height: 20),
                 _buildTextField("목표 지방", _goalFatController, suffix: "g", isNumber: true, focusNode: _fatFocusNode, placeholder: _recommendedFat?.toString()),
               ]),
-
               const SizedBox(height: 40),
-
               SizedBox(
                 width: double.infinity,
                 height: 55,
@@ -319,54 +303,45 @@ class _SignUpPageState extends State<SignUpPage> {
   Widget _buildActivitySelector() { final Map<String, String> activityDescriptions = {'매우 비활동적': '운동 거의 안함', '가벼운 활동': '주 1-3회 운동', '중간 활동': '주 3-5회 운동', '고활동': '주 6-7회 운동', '매우 고활동': '매일, 하루 2번'}; return Column(children: [Row(children: [Expanded(child: _buildActivityButton('매우 비활동적', activityDescriptions['매우 비활동적']!)), const SizedBox(width: 10), Expanded(child: _buildActivityButton('가벼운 활동', activityDescriptions['가벼운 활동']!)), const SizedBox(width: 10), Expanded(child: _buildActivityButton('중간 활동', activityDescriptions['중간 활동']!))]), const SizedBox(height: 10), Row(children: [Expanded(child: _buildActivityButton('고활동', activityDescriptions['고활동']!)), const SizedBox(width: 10), Expanded(child: _buildActivityButton('매우 고활동', activityDescriptions['매우 고활동']!))])]); }
   Widget _buildActivityButton(String activityLevel, String description) { bool isSelected = _selectedActivity == activityLevel; return GestureDetector(onTap: () { setState(() => _selectedActivity = activityLevel); _calculateRecommendations(); }, child: AnimatedContainer(duration: const Duration(milliseconds: 200), padding: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: isSelected ? Colors.black : Colors.grey[100], borderRadius: BorderRadius.circular(12)), alignment: Alignment.center, child: Text(description, style: TextStyle(color: isSelected ? Colors.white : Colors.grey[700], fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center))); }
 
-  // 조언자 선택을 위한 새로운 텍스트 버튼 빌더 함수들
-  Widget _buildAdvisorTextSelector() {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(child: _buildAdvisorTextButton(_advisors[0])), // 트레이너
-            const SizedBox(width: 10),
-            Expanded(child: _buildAdvisorTextButton(_advisors[1])), // 남자친구
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(child: _buildAdvisorTextButton(_advisors[2])), // 여자친구
-            const SizedBox(width: 10),
-            Expanded(child: _buildAdvisorTextButton(_advisors[3])), // 엄마
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAdvisorTextButton(AdvisorInfo advisor) {
-    bool isSelected = _selectedAdvisor == advisor.key;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedAdvisor = advisor.key;
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.black : Colors.grey[100],
-          borderRadius: BorderRadius.circular(12),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          advisor.name, // UI에는 한글 이름 표시
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey[700],
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
+  /// 조언자 선택을 위한 드롭다운 빌더 함수
+  Widget _buildAdvisorDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedAdvisor,
+      items: _advisors.map((AdvisorInfo advisor) {
+        return DropdownMenuItem<String>(
+          value: advisor.key,
+          child: Text(
+            advisor.name,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
+        );
+      }).toList(),
+      onChanged: (String? newValue) {
+        if (newValue != null) {
+          setState(() {
+            _selectedAdvisor = newValue;
+          });
+        }
+      },
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: Colors.grey[100],
+        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.black, width: 1.5),
         ),
       ),
+      icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+      dropdownColor: Colors.white,
     );
   }
 }

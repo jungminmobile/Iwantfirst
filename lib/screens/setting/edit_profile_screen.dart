@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../utils/diet_notifier.dart';
 
-// ★ 1. 조언자 정보 모델 클래스 정의
+// 조언자 정보 모델 클래스 정의
 class AdvisorInfo {
   final String key; // 저장용 (영어)
   final String name; // 표시용 (한글)
@@ -44,12 +44,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _isLoading = true;
   final User? currentUser = FirebaseAuth.instance.currentUser;
 
-  // ★ 2. 조언자 정보 리스트와 선택된 조언자 변수 선언
+  // ★★★ 조언자 리스트에 '해병대' 추가 ★★★
   final List<AdvisorInfo> _advisors = [
     AdvisorInfo(key: 'trainer', name: '트레이너'),
     AdvisorInfo(key: 'boyfriend', name: '남자친구'),
     AdvisorInfo(key: 'girlfriend', name: '여자친구'),
     AdvisorInfo(key: 'mother', name: '엄마'),
+    AdvisorInfo(key: 'doctor', name: '의사'),
+    AdvisorInfo(key: 'mad_scientist', name: '미친 과학자 (Beta)'),
+    AdvisorInfo(key: 'marine', name: '해병대 (Beta)'), // 신규 추가
   ];
   String _selectedAdvisor = 'trainer'; // 기본값 설정
 
@@ -104,7 +107,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  // ★ 3. _loadUserData() 함수에 조언자 정보 로드 로직 추가
   Future<void> _loadUserData() async {
     if (currentUser == null) {
       if (mounted) setState(() => _isLoading = false);
@@ -126,8 +128,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               (profileData['weight'] as num?)?.toString() ?? '';
           _ageController.text = (profileData['age'] as num?)?.toString() ?? '';
           _selectedGender = profileData['gender'] ?? '남성';
-
-          // 👇👇👇 저장된 advisor 값을 불러와 상태 업데이트
           _selectedAdvisor = profileData['advisor'] ?? 'trainer';
         }
         if (data.containsKey('goals')) {
@@ -153,7 +153,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   void _calculateRecommendations() {
-    // (기존과 동일, 수정 없음)
     final double? height = double.tryParse(_heightController.text);
     final double? weight = double.tryParse(_weightController.text);
     final int? age = int.tryParse(_ageController.text);
@@ -190,7 +189,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     });
   }
 
-  // ★ 4. _saveProfile() 함수에 조언자 정보 저장 로직 추가
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate() || currentUser == null) return;
     setState(() => _isLoading = true);
@@ -203,25 +201,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           'weight': double.tryParse(_weightController.text.trim()) ?? 0.0,
           'age': int.tryParse(_ageController.text.trim()) ?? 0,
           'gender': _selectedGender,
-          // 👇👇👇 수정한 조언자 정보(영어 key)를 함께 저장
           'advisor': _selectedAdvisor,
         },
         'goals': {
           'target_calories':
-          int.tryParse(_targetCaloriesController.text.trim()) ??
-              _recommendedCalories ??
-              0,
+          int.tryParse(_targetCaloriesController.text.trim()) ?? _recommendedCalories ?? 0,
           'target_carbs':
-          int.tryParse(_targetCarbsController.text.trim()) ??
-              _recommendedCarbs ??
-              0,
+          int.tryParse(_targetCarbsController.text.trim()) ?? _recommendedCarbs ?? 0,
           'target_protein':
-          int.tryParse(_targetProteinController.text.trim()) ??
-              _recommendedProtein ??
-              0,
-          'target_fat': int.tryParse(_targetFatController.text.trim()) ??
-              _recommendedFat ??
-              0,
+          int.tryParse(_targetProteinController.text.trim()) ?? _recommendedProtein ?? 0,
+          'target_fat': int.tryParse(_targetFatController.text.trim()) ?? _recommendedFat ?? 0,
           'user_goal': _selectedGoal,
           'activity_level': _selectedActivity,
         },
@@ -235,14 +224,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       DietNotifier.notify();
 
       if (mounted) {
-        ScaffoldMessenger.of(context,)
+        ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('정보가 저장되었습니다.')));
         Navigator.of(context).pop();
       }
     } catch (e) {
       print("프로필 저장 오류: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context,)
+        ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('오류가 발생했습니다: $e')));
       }
     } finally {
@@ -250,7 +239,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  // ★ 5. build() 함수에 조언자 선택 UI 추가
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -302,14 +290,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               const SizedBox(height: 30),
 
-              // 👇👇👇 조언자 수정 섹션 (새로 추가) 👇👇👇
               _buildSectionHeader("나의 조언자"),
               const SizedBox(height: 15),
               _buildSectionCard(
                 children: [
                   _buildSubHeader("식단 피드백을 제공할 AI 조언자를 선택해주세요."),
                   const SizedBox(height: 15),
-                  _buildAdvisorTextSelector(), // 조언자 선택 위젯 호출
+                  _buildAdvisorDropdown(),
                 ],
               ),
 
@@ -374,50 +361,45 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget _buildActivitySelector() { final Map<String, String> activityDescriptions = {'매우 비활동적': '운동 거의 안함', '가벼운 활동': '주 1-3회 운동', '중간 활동': '주 3-5회 운동', '고활동': '주 6-7회 운동', '매우 고활동': '매일, 하루 2번'}; return Column(children: [Row(children: [Expanded(child: _buildActivityButton('매우 비활동적', activityDescriptions['매우 비활동적']!)), const SizedBox(width: 10), Expanded(child: _buildActivityButton('가벼운 활동', activityDescriptions['가벼운 활동']!)), const SizedBox(width: 10), Expanded(child: _buildActivityButton('중간 활동', activityDescriptions['중간 활동']!))]), const SizedBox(height: 10), Row(children: [Expanded(child: _buildActivityButton('고활동', activityDescriptions['고활동']!)), const SizedBox(width: 10), Expanded(child: _buildActivityButton('매우 고활동', activityDescriptions['매우 고활동']!))])]); }
   Widget _buildActivityButton(String activityLevel, String description) { bool isSelected = _selectedActivity == activityLevel; return GestureDetector(onTap: () { setState(() => _selectedActivity = activityLevel); _calculateRecommendations(); }, child: AnimatedContainer(duration: const Duration(milliseconds: 200), padding: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: isSelected ? Colors.black : Colors.grey[100], borderRadius: BorderRadius.circular(12)), alignment: Alignment.center, child: Text(description, style: TextStyle(color: isSelected ? Colors.white : Colors.grey[700], fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center))); }
 
-  // ★ 6. 조언자 선택을 위한 새로운 텍스트 버튼 빌더 함수들
-  Widget _buildAdvisorTextSelector() {
-    return Column(
-      children: [
-        Row(children: [
-          Expanded(child: _buildAdvisorTextButton(_advisors[0])), // 트레이너
-          const SizedBox(width: 10),
-          Expanded(child: _buildAdvisorTextButton(_advisors[1])), // 남자친구
-        ]),
-        const SizedBox(height: 10),
-        Row(children: [
-          Expanded(child: _buildAdvisorTextButton(_advisors[2])), // 여자친구
-          const SizedBox(width: 10),
-          Expanded(child: _buildAdvisorTextButton(_advisors[3])), // 엄마
-        ]),
-      ],
-    );
-  }
-
-  Widget _buildAdvisorTextButton(AdvisorInfo advisor) {
-    bool isSelected = _selectedAdvisor == advisor.key;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedAdvisor = advisor.key;
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.black : Colors.grey[100],
-          borderRadius: BorderRadius.circular(12),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          advisor.name, // UI에는 한글 이름 표시
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey[700],
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
+  /// 조언자 선택을 위한 드롭다운 빌더 함수
+  Widget _buildAdvisorDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedAdvisor,
+      items: _advisors.map((AdvisorInfo advisor) {
+        return DropdownMenuItem<String>(
+          value: advisor.key,
+          child: Text(
+            advisor.name,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
+        );
+      }).toList(),
+      onChanged: (String? newValue) {
+        if (newValue != null) {
+          setState(() {
+            _selectedAdvisor = newValue;
+          });
+        }
+      },
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: Colors.grey[100],
+        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.black, width: 1.5),
         ),
       ),
+      icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+      dropdownColor: Colors.white,
     );
   }
 }

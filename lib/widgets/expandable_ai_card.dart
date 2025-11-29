@@ -46,6 +46,10 @@ class _ExpandableAiCardState extends State<ExpandableAiCard> {
         return '트레이너';
       case 'doctor':
         return '의사 선생님';
+      case 'mad_scientist':
+        return '미친 과학자';
+      case 'marine':
+        return '해병대';
       default:
         return 'AI';
     }
