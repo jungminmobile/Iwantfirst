@@ -38,8 +38,10 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 현재 선택된 인덱스에 맞는 화면을 보여줌
-      body: _screens[_selectedIndex],
+      body: IndexedStack(
+        index: _selectedIndex, // 현재 보여줄 화면 번호
+        children: _screens,    // 미리 만들어둔 화면 리스트
+      ),
 
       // 하단 네비게이션 바
       bottomNavigationBar: NavigationBar(

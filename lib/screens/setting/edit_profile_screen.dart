@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../utils/diet_notifier.dart';
 
 // ★ 1. 조언자 정보 모델 클래스 정의
 class AdvisorInfo {
@@ -230,6 +231,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           .collection('users')
           .doc(currentUser!.uid)
           .set(updatedData, SetOptions(merge: true));
+
+      DietNotifier.notify();
 
       if (mounted) {
         ScaffoldMessenger.of(context,)
