@@ -6,7 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 // 위젯 import
 import '../widgets/calorie_chart.dart';
-import '../widgets/macro_chart.dart'; // 👈 새로 만든 막대그래프 파일 import
+import '../widgets/macro_chart.dart'; // 새로 만든 막대그래프 파일 import
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

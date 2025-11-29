@@ -158,26 +158,33 @@ class _StatsScreenState extends State<StatsScreen> {
     const opticYellow = Color(0xFFCCFF00);
     const mainGreen = Color(0xFF33FF00);
 
-    if (percentage < 0.5) {
-      // 0% ~ 50%: 빨간색 (너무 부족)
+    if (percentage < 0.4) {
+      // 0% ~ 40%: 빨간색 (너무 부족)
       return Colors.red.withOpacity(0.8);
-    } else if (percentage < 0.75) {
-      // 50% ~ 75%: 주황색 (부족)
+    } else if (percentage < 0.55) {
+      // 40% ~ 55%: 주황색 (부족)
       return Colors.orange.withOpacity(0.8);
-    } else if (percentage < 0.9) {
-      // 75% ~ 90%: 옵틱 옐로우 (약간 부족)
+    } else if (percentage < 0.70) {
+        // 55% ~ 70%: 노란색 (약간 부족)
+      return Colors.yellow.withOpacity(0.8);
+    } else if (percentage < 0.85) {
+      // 70% ~ 85%: 옵틱 옐로우 (적당)
       return opticYellow.withOpacity(0.8);
-    } else if (percentage <= 1.1) {
-      // 90% ~ 110%: 초록색 (목표 달성! 적정 구간)
+    } else if (percentage <= 1.15) {
+      // 85% ~ 115%: 초록색 (목표 달성! 적정 구간)
       return mainGreen.withOpacity(0.8);
-    } else if (percentage < 1.25) {
-      // 110% ~ 125%: 옵틱 옐로우 (약간 과식)
+    } else if (percentage < 1.35) {
+      // 115% ~ 135%: 옵틱 옐로우 (약간 과식)
       return opticYellow.withOpacity(0.8);
-    } else if (percentage < 1.5) {
-      // 125% ~ 150%: 주황색 (과식)
+    }
+    else if (percentage < 1.5) {
+      // 55% ~ 70%: 노란색
+      return Colors.yellow.withOpacity(0.8);
+    } else if (percentage < 1.7) {
+      // 145% ~ 170%: 주황색 (과식)
       return Colors.orange.withOpacity(0.8);
     } else {
-      // 150% 이상: 빨간색 (폭식 경고)
+      // 170% 이상: 빨간색 (폭식 경고)
       return Colors.red.withOpacity(0.8);
     }
   }
@@ -208,7 +215,7 @@ class _StatsScreenState extends State<StatsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 5),
                       const Text(
                         "식단 통계",
                         style: TextStyle(
@@ -217,7 +224,7 @@ class _StatsScreenState extends State<StatsScreen> {
                           color: Colors.black,
                         ),
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 10),
                       _buildChartSection(),
                       const SizedBox(height: 16),
                       _buildCalendarAndStatsCard(),
